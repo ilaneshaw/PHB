@@ -1,0 +1,1368 @@
+---
+title: "postHocBinning"
+author: "Isolde Lane Shaw"
+date: "1/17/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+options(digits=3) #limit number of digits displayed
+```
+
+
+```{r setup}
+library(Require)
+
+#list packages to load
+Require("data.table")
+Require("rgdal")
+Require("sf")
+Require("raster")
+Require("SpaDES.core") 
+Require("LandR")
+Require("googledrive")
+Require("plotrix") 
+Require("ggplot2")
+Require("ggpubr")
+Require("diptest")
+Require("nortest")
+Require("gbm")
+Require("dplyr")
+Require("tidyverse")
+Require("reshape2")
+Require("RColorBrewer")
+Require("rasterVis")
+#Require("tidyr")
+
+#set up input and output folders and subfolders
+inputsDir <- checkPath("inputs", create = TRUE)
+outputsDir <- checkPath("outputs", create = TRUE)
+
+downloadFolderArea <- checkPath(file.path(inputsDir, "studyArea"), create = TRUE)
+downloadFolderBird <- checkPath(file.path(inputsDir, "birdRasterFiles"), create = TRUE)
+downloadFolderForestClass <- checkPath(file.path(inputsDir, "forestClassRasters"), create = TRUE)
+outputFolderBirdPreds <- checkPath(file.path(outputsDir, "outputBirdPreds"), create = TRUE)
+outputFolderBirdPredsRasters <- checkPath(file.path(outputsDir, "outputBirdPredsRasters"), create = TRUE)
+```
+
+
+
+
+
+
+# GET INPUTS
+
+# rasterToMatch and studyArea
+
+Download rasterToMatch and studyArea. Crop and Mask rasterToMatch to studyArea.
+
+Parameters: locationRasterToMatch, nameAreaShapefile, folderUrlArea, archiveArea 
+
+
+```{r rasterToMatch}
+locationRasterToMatch <- "C:/Users/RALAS6/Documents/Repositories/PHB/LCC2005_V1_4a.tif" 
+rasterToMatch <- raster::raster(locationRasterToMatch)
+#rasterToMatch <- LandR::prepInputsLCC(destinationPath = inputsDir) #gets LCC2010
+```
+
+```{r studyArea}
+nameAreaShapefile <- "BCR6_BC.shp" #specify file name
+folderUrlArea <- "https://drive.google.com/file/d/1SjUKXOcNqDUkRxRTjwgLlLFjb5LRzbHy" #specify folder url
+archiveArea <- "BCR6_BC.zip" #give archive name
+
+studyArea <- prepInputs(targetFile = nameAreaShapefile, 
+                        url = folderUrlArea,
+                        archive = archiveArea, 
+                        alsoExtract = "similar", #Extract other files with similar names
+                        destinationPath = downloadFolderArea, #folder to download to
+                        fun = "raster::shapefile", #use the function shapefile
+                        targetCRS = crs(rasterToMatch), #make crs same as rasterToMatch
+                        overwrite = TRUE,
+                        verbose = TRUE)
+
+plot(studyArea)
+
+#crop and mask rasterTomatch to studyArea
+rasterToMatch <- raster::crop(rasterToMatch, studyArea) 
+rasterToMatch <- raster::mask(rasterToMatch, studyArea) 
+
+
+plot(rasterToMatch)
+
+```
+
+```{r save rasterToMatch and studyArea}
+
+#save the rasterToMatch
+   save(rasterToMatch, 
+        file =  file.path(downloadFolderArea, "rasterToMatch.Rdata"))  
+   #load(file.path(downloadFolderArea, "rasterToMatch.Rdata"))
+
+#save the studyArea
+   save(studyArea, 
+        file =  file.path(downloadFolderArea, "studyArea.Rdata"))  
+   #load(file.path(downloadFolderArea, "studyArea.Rdata"))
+   
+   
+```
+
+
+# Get rasters of predicted bird density
+
+Here we choose the bird species we want to study via the birdList. They are then downloaded and postProcessed so they match the studyArea.
+
+Note: this can require significant space on drive, depending on number of species chosen
+
+Parameters: birdList, folderUrlBirdRaster, patternNameBirdRaster
+
+
+```{r getBirdrasters}
+# #Specify which bird species to examine/input
+# birdList <- c("BARS", "BBWA", "BBWO", "BTNW", "CAWA", "EVGR", "OSFL", "OVEN", "RUBL") 
+# # give file location
+# folderUrlBirdRaster <- "https://drive.google.com/file/d/1YsKutSWrr9PXR6h_vnFTlthNevOgIVZZ/view?usp=sharing"
+# #give archive name
+# archiveBirdRaster <- "birdRasters.zip"
+#  
+# 
+# birdRasters <- lapply(X = birdList, FUN = function(bird){
+# 
+#   #specify file name. NOTE: ONLY WORKS FOR THIS NAMING CONVENTION
+#   nameBirdRaster <- paste("mosaic-", bird, "-run3.tif", sep = "")
+#  
+#   
+#   birdNM <- prepInputs(targetFile = nameBirdRaster,
+#                         url = folderUrlBirdRaster,
+#                         archive = archiveBirdRaster,
+#                         #Extract other files with similar names
+#                         alsoExtract = "similar",
+#                         #save the file to a folder in the
+#                         #working directory called forestClassRasters
+#                         destinationPath = downloadFolderBird,
+#                         #use the function raster
+#                         #targetCRS = crs(rasterToMatch),
+#                         fun = "raster::raster",
+#                         #use the specified rasterToMatch to reproject to
+#                         rasterToMatch = rasterToMatch,
+#                         studyArea = studyArea,
+#                         useCache = getOption("reproducible.useCache", FALSE),
+#                         overwrite = TRUE,
+#                         verbose = TRUE)
+# 
+# 
+# names(birdNM) <- paste(bird)
+# 
+# print(paste(bird,"added"))
+# birdNM #visually check Raster
+# #plot(birdNM)
+# 
+# 
+# return(birdNM)
+#     })
+# 
+# names(birdRasters) <- birdList
+# 
+# plot(birdRasters$OVEN, colNA="grey70")
+
+```
+
+```{r getBirdrasters}
+
+#check out what is in the folder
+folderUrlBirdRaster <- "https://drive.google.com/drive/folders/11HdfTqNhHmzJ8Qk0Pk0NfiLKwyRkrltS" 
+patternNameBirdRaster <- "mosaic-" #choose naming pattern to look for
+
+## drive_ls function is used to list all the files it finds using the folder url with the given pattern
+    filesToDownload <-
+      googledrive::drive_ls(path = as_id(folderUrlBirdRaster), 
+                            pattern = patternNameBirdRaster)
+    
+    print(filesToDownload$name)
+
+#Specify which bird species to input
+birdList <- c("BARS", "BBWA", "BBWO", "BTNW", "CAWA", "EVGR", "OSFL", "OVEN", "RUBL") 
+### "BAWW", "OVEN" , "CAWA", "ALFL", "AMCR", "AMGO", "AMPI", "AMRE", "AMRO", "ATSP", "ATTW", "BANS", "BAOR", "BARS", "BBMA", "BBWA", "BBWO", "BCCH", "BEKI", "BGGN", "BHCO", "BHVI", "BLBW", "BLJA", "BLPW", "BOBO", "BOCH", "BOWA", "BRBL", "BRCR", "BRTH", "BTBW", "BTNW", "BWWA",  "CCSP", "CEDW", "CHSP", "CLSW", "CMWA", "COGR", "CONW", "CORA", "COYE", "CSWA", "DEJU", "DOWO", "DUFL", "DUNL", "EABL", "EAKI", "EAPH", "EATO", "EAWP", "EUST", "EVGR", "FISP", "FOSP", "GCFL", "GCKI", "GCSP", "GCTH", "GRAJ", "GRCA", "GRSP", "GRYE", "GWWA", "HAFL", "HAWO", "HETH", "HOLA", "HOSP", "HOWR", "INBU", "KILL", "LALO", "LCSP", "LEFL", "LEYE", "LISP", "MAWA", "MOBL", "MODO", "MOWA", "NAWA", "NESP", "NOCA", "NOFL", "NOPA", "NOWA", "OCWA", "OSFL", "PAWA", "PHVI", "PIGR", "PISI", "PIWA", "PIWO", "PUFI", "RBGR", "RBNU", "RBWO", "RCKI", "RECR", "REVI", "RHWO", "ROPI", "RTHU", "RUBL", "RUGR", "RWBL", "SAVS", "SCTA", "SEWR", "SOGR", "SOSA", "SOSP", "SPGR", "SPSA", "SWSP", "SWTH", "TEWA", "TOSO", "TOWA", "TRES", "UPSA", "VATH", "VEER", "VESP", "WAVI", "WBNU", "WCSP", "WETA", "WEWP", "WIPT", "WISN", "WITU", "WIWA", "WIWR", "WOTH", "WTSP", "WWCR", "YBCU", "YBFL", "YBSA", "YEWA", "YHBL", "YRWA"
+
+
+## grepl function searches for all items in the filesToDownload that are on birdList & stores their names in rastersforBirdList
+    rastersForBirdList <-
+      filesToDownload$name[grepl(pattern = paste(birdList, collapse = "|"),
+                                 x = filesToDownload$name)]
+
+        ## for each item in turn from rastersForBirdlist the following function is applied:
+    birdRasters <-
+      lapply(
+        X = rastersForBirdList,
+        FUN = function(rasterFile) {
+          
+          nameBird <- substr(rasterFile, 8, 11) #works for strings of the form "mosaic-XXXX-run3.tif"
+          nameBird <- paste(nameBird, ".tif", sep = "")
+          print(nameBird)
+          ## if the item in rastersForBirdList is not already present at rastersPath, googledrive package downloads it
+          if (!file.exists(file.path(downloadFolderBird, rasterFile))) {
+            googledrive::drive_download(
+              file = as_id(filesToDownload[filesToDownload$name %in% rasterFile,]$id),
+               overwrite = TRUE,
+              path = file.path(downloadFolderBird, nameBird)
+             
+            )
+          }
+          
+          ## otherwise, if it is already present and downloaded, just get the name of the item
+          return(raster(file.path(downloadFolderBird, nameBird), verbose = TRUE))
+        }
+      )
+    
+    #get the species codes as names for the downloadedRasters object, rather than using the whole filepath
+    X <- lapply(rastersForBirdList, substr, 8, 11) #works for strings of the form "mosaic-XXXX-run3.tif"
+    names(birdRasters) <- X
+   
+   birdRasters <- lapply(X = birdRasters, FUN = function(RasterLayer) {
+    ## the function postProcesses the layer, cropping and masking it to a given study area and rasterToMatch, and saving it to a given destination path
+    proRaster <- reproducible::postProcess(RasterLayer, 
+                             studyArea = studyArea,
+                             rasterToMatch = rasterToMatch,
+                             destinationPath = downloadFolderBird,
+                             filename2 = paste(names(RasterLayer), ".tif", sep = ""),
+                             overwrite = TRUE)
+    
+    plot(proRaster, colNA="grey70") #check raster visually
+    
+    return(proRaster)
+  }) 
+   
+  
+```
+
+```{r saveInputBirdRasters}
+
+#save the bird Rasters
+
+   save(birdRasters, 
+        file =  file.path(downloadFolderBird, "birdRasters.Rdata"))  
+   #load(file.path(downloadFolderBird, "birdRasters.Rdata"))
+   
+   
+```
+
+
+# Get landscape data rasters 
+
+Three rasters are needed:
+- forClassRaster, a categorical raster of forest classes
+- nonForRaster, a categorical raster of land cover classes for areas not covered by forClassRaster
+- ageRaster, a raster giving ages of the forest areas covered by the forClassRaster
+
+Parameters: nameForClassRaster, folderUrlForClass, archiveForClass, 
+nameNonForRaster, folderUrlNonFor, archiveNonFor, nameAgeRaster, folderUrlAge, archiveAge
+
+```{r getForClassRaster}
+
+# #specify file name
+# nameForClassRaster <- "vegTypesRasCASFRI_bcr6BC.tif"
+# folderUrlForClass <- "https://drive.google.com/file/d/1Zb-1voa4n7jE4XcLAjEoTjxWl5dq48YX/view?usp=sharing"
+# #give archive name
+# archiveForClass <- "CASFRI_BCR6-BC.zip"
+
+
+#specify file name
+nameForClassRaster <- "vegTypesRas.tif"
+folderUrlForClass <- "https://drive.google.com/file/d/1eZsVRSh3PNvsswZQtKP5zb4ExHn0ZvhP/view?usp=sharing"
+#give archive name
+archiveForClass <- "BCR6-BC.zip"
+
+forClassRaster <- prepInputs(targetFile = nameForClassRaster,
+                        url = folderUrlForClass,
+                        archive = archiveForClass,
+                        #Extract other files with similar names
+                        alsoExtract = "similar",
+                        #save the file to a folder in the
+                        #working directory called forestClassRasters
+                        destinationPath = downloadFolderForestClass,
+                        #use the function raster
+                        #targetCRS = crs(rasterToMatch),
+                        fun = "raster::raster",
+                        #use the specified rasterToMatch to reproject to
+                        rasterToMatch = rasterToMatch,
+                        studyArea = studyArea,
+                        useCache = getOption("reproducible.useCache", FALSE),
+                        overwrite = TRUE,
+                        verbose = TRUE)
+
+names(forClassRaster) <- c("forClassRaster")
+
+forClassRaster[forClassRaster == 0] <- NA
+
+
+```
+
+```{r getNonForRaster}
+
+# #specify file name
+# nameNonForRaster <- "nonForestRasCASFRI_bcr6BC.tif"
+# folderUrlNonFor  <- "https://drive.google.com/file/d/1Zb-1voa4n7jE4XcLAjEoTjxWl5dq48YX/view?usp=sharing"
+# #give archive name
+# archiveNonFor  <- "CASFRI_BCR6-BC.zip"
+
+#specify file name
+nameNonForRaster <- "nonForestRas_bcr6BC.tif"
+folderUrlNonFor <- "https://drive.google.com/file/d/1eZsVRSh3PNvsswZQtKP5zb4ExHn0ZvhP/view?usp=sharing"
+
+#give archive name
+archiveNonFor <- "BCR6-BC.zip"
+
+nonForRaster <- prepInputs(targetFile = nameNonForRaster,
+                        url = folderUrlNonFor,
+                        archive = archiveNonFor,
+                        #Extract other files with similar names
+                        alsoExtract = "similar",
+                        #save the file to a folder in the
+                        #working directory called forestClassRasters
+                        destinationPath = downloadFolderForestClass,
+                        #use the function raster
+                        fun = "raster::raster",
+                        #targetCRS = crs(rasterToMatch),
+                        #use the specified rasterToMatch to reproject to
+                        rasterToMatch = rasterToMatch,
+                        studyArea = studyArea,
+                        useCache = getOption("reproducible.useCache", FALSE),
+                        overwrite = TRUE,
+                        verbose = TRUE)
+
+#nonForRaster[nonForRaster == 0] <- NA
+
+names(nonForRaster) <- c("nonForRaster")
+
+
+nonForRaster <- overlay(x = nonForRaster,
+                        y = forClassRaster,
+                        fun = function(x, y) {
+                         x[!is.na(y[])] <- NA
+                          return(x)
+                            })
+
+
+```
+
+```{r getAgeRaster}
+
+# #specify file name
+# nameAgeRaster <- "ageRasCASFRI_bcr6BC.tif"
+# folderUrlAge  <- "https://drive.google.com/file/d/1Zb-1voa4n7jE4XcLAjEoTjxWl5dq48YX/view?usp=sharing"
+# #give archive name
+# archiveAge  <- "CASFRI_BCR6-BC.zip"
+
+#specify file name
+nameAgeRaster <- "ageRas.tif"
+folderUrlAge <- "https://drive.google.com/file/d/1eZsVRSh3PNvsswZQtKP5zb4ExHn0ZvhP/view?usp=sharing"
+
+#give archive name
+archiveAge <- "BCR6-BC.zip"
+
+ageRaster <- prepInputs(targetFile = nameAgeRaster,
+                        url = folderUrlAge,
+                        archive = archiveAge,
+                        #Extract other files with similar names
+                        alsoExtract = "similar",
+                        #save the file to a folder in the working directory
+                        #called forestClassRasters
+                        destinationPath = downloadFolderForestClass,
+                        #use the function raster
+                        fun = "raster::raster",
+                        #targetCRS = crs(rasterToMatch),
+                        #use the specified rasterToMatch to reproject to
+                        rasterToMatch = rasterToMatch,
+                        studyArea = studyArea,
+                        overwrite = TRUE,
+                        verbose = TRUE)
+
+names(ageRaster) <- c("ageRaster")
+
+```
+
+```{r save Input landscape rasters}
+
+#save the forClassRaster
+   save(forClassRaster, 
+        file =  file.path(downloadFolderForestClass, "forClassRaster.Rdata"))  
+   #load(file.path(downloadFolderForestClass, "forClassRaster.Rdata"))
+
+#save the nonForRaster
+   save(nonForRaster, 
+        file =  file.path(downloadFolderForestClass, "nonForRaster.Rdata"))  
+   #load(file.path(downloadFolderForestClass, "nonForRaster.Rdata"))
+
+#save the ageRaster
+   save(ageRaster, 
+        file =  file.path(downloadFolderForestClass, "ageRaster.Rdata"))  
+   #load(file.path(downloadFolderForestClass, "ageRaster.Rdata"))
+   
+   
+```
+
+```{r plot Input landscape rasters}
+
+#forClassRaster
+#plot(forClassRaster, colNA="grey70")
+# customizing the legend
+plot(forClassRaster, legend = FALSE, col = rev(terrain.colors(7)), colNA="grey70")
+legend("topright", legend = c("Black Spruce", "Black Spruce Wet", "Conifer Mix", "Deciduous", "Mixed", "Pine", "White Spruce"), fill = rev(terrain.colors(7)))
+
+#nonForRaster
+#plot(nonForRaster,colNA="grey70")
+# customizing the legend
+plot(nonForRaster, legend = FALSE, col = rev(terrain.colors(7)), colNA="grey70")
+legend("topright", legend = c("Forested", "Water/Ice", "Wetland", "Anthro/Exposed Land", "Grass/Cropland", "Shrub", "Bryoid"), fill = rev(terrain.colors(7)))
+
+#ageRaster
+plot(ageRaster, main = 'ageRaster', colNA="grey70" ) 
+   
+   
+```
+
+
+# Create landscape raster and FNF Raster 
+
+Here we create two additional rasters from the input rasters:
+
+- landscapeRaster, a categorical raster of the combined forClassRaster and nonForRaster
+- FNF raster, a categorical raster giving whether a cell is covered by the forClassRaster (1), or not (0)
+
+
+
+```{r createLandscapeRaster}
+
+landscapeRaster <- raster::cover(x = forClassRaster,
+                                 y = nonForRaster )
+
+names(landscapeRaster) <- c("landscapeRaster")
+
+#visually check nonForRaster
+plot(landscapeRaster, colNA="grey70") 
+
+```
+
+
+```{r createFNFRaster}
+
+#create a raster that gives if an area is forest or not 
+#(0 for non-forest, 1 for forest)
+#This will allow me to have a value in the birdDataset 
+#that says if a cell was forested or not
+
+#make forest 1
+valsFR <- unique(forClassRaster)
+newValFR <-  as.factor(rep("1", length(valsFR)))
+newValsFR <- cbind(valsFR, newValFR)
+reclassMatrixFR <- matrix(newValsFR, 
+                              ncol=2, byrow = FALSE)
+rasterFR <- reclassify(forClassRaster,
+                     reclassMatrixFR)
+
+#make the rest 0 
+replaceNA <- function(x, na.rm, ...){ 
+  if(is.na(x[1]))
+    return(0)
+  else
+    return(x)
+} 
+
+FNFRaster <- calc(rasterFR, fun = replaceNA)
+#mask back down to size again
+FNFRaster <- raster::mask(FNFRaster,rasterToMatch)
+
+names(FNFRaster) <- c("FNFRaster")
+
+#visually check FNFRaster
+plot(FNFRaster, colNA="grey70") 
+
+```
+
+```{r save landscape and FNF rasters}
+
+#save the landscapeRaster
+   save(landscapeRaster, 
+        file =  file.path(downloadFolderForestClass, "landscapeRaster.Rdata"))  
+   #load(file.path(downloadFolderForestClass, "landscapeRaster.Rdata"))
+
+#save the FNFRaster
+   save(FNFRaster, 
+        file =  file.path(downloadFolderForestClass, "FNFRaster.Rdata"))  
+   #load(file.path(downloadFolderForestClass, "FNFRaster.Rdata"))
+
+```
+
+
+# Extract all data from landscape and bird rasters into data tables
+
+Creates a list of data tables, one for each bird on the birdList, providing the predicted bird density at each cell, alongside the corresponding values for that cell given by each of the landscape rasters. 
+
+
+```{r getBirdDataset}
+
+landscapeRasters <- raster::stack(landscapeRaster, 
+                                       ageRaster, 
+                                       FNFRaster)
+
+
+birdDatasets <- lapply(X = birdList, FUN = function(bird){
+    
+    birdLayer <- eval(parse(text=paste("birdRasters$", bird, sep = "")))
+    landBirdRasterStack <- raster::addLayer(birdLayer, landscapeRasters)
+    
+    
+    ## take the values from the rasters and input 
+    ## them to a data table called cellValues
+    cellValues <- data.table(getValues(landBirdRasterStack))
+    cellValues <- setnames(cellValues, c( "birdDensity", 
+                                          "landForClass", 
+                                          "age", 
+                                          "forestedStatus"))
+    cellValues <- unite(cellValues, 
+                        uniqueClasses, 
+                        c(forestedStatus, 
+                          landForClass), 
+                        remove=FALSE)
+    
+    #get rid of any rows with NA values
+    cellValues <- na.omit(cellValues, cols = c("birdDensity", "landForClass")) 
+    
+    ## make sure landForClass and forestedStatus 
+    ## are categorical rather than numerical
+    cellValues$landForClass <- as.factor(cellValues$landForClass) 
+    cellValues$forestedStatus <- as.factor(cellValues$forestedStatus)
+    cellValues$uniqueClasses <- as.factor(cellValues$uniqueClasses)
+    
+   
+    print(paste(bird," dataset complete"))
+    
+    return(cellValues)
+  })
+
+names(birdDatasets) <- names(birdRasters)
+for (i in names(birdDatasets)) {
+  attr(birdDatasets[[i]],"Species") <- i
+  
+}
+
+## demonstrate what the first few lines of 
+## one of the birdDatasets looks like
+head(birdDatasets$OVEN) 
+
+```
+
+```{r saveBirdDatasets}
+
+#save the output bird Dataset tables
+
+   save(birdDatasets, 
+        file =  file.path(outputFolderBirdPreds, "birdDatasets.Rdata"))  
+   #load(file.path(outputFolderBirdPreds, "birdDatasets.Rdata"))
+   
+```
+
+
+
+
+
+
+#1D POST-HOC BINNING
+
+Here we create predictions of bird densities by land cover class and forest class, and produce summary statistics of the results.
+
+
+# Get mean bird densities by cover class and calculate statistics for each class
+
+Creates birdPreds1D, a list of tables, one for each bird on the birdList, giving mean bird density for each class, and summary statistics including class count, variance, standard error, and test statistics and p-values for tests of unimodality and normality. 
+
+```{r functionGetbirdPreds1D}
+
+  birdPreds1D <- lapply(X = birdList, FUN = function(bird){ 
+
+    print(bird)
+singleBirdDataset <-  eval(parse(text=paste("birdDatasets$", bird, sep = "")))
+
+    birdStats <- singleBirdDataset[order(-forestedStatus, 
+                                         landForClass) 
+                                   # order the rows by the land cover class
+                                   ][,list(classCount = .N, 
+                                           # get the number of cells 
+                                           # each cover class
+                                           #meanBirdDensity = mean(birdDensity), 
+                                           # get the mean bird density 
+                                           #for each cover class
+                                           meanBirdDensity = mean(birdDensity),
+                                           #try log of mean bird density
+                                           varBirdDensity = var(birdDensity), 
+                                           # get the variance for bird density
+                                           # for each cover class
+                                           seBirdDensity = std.error(birdDensity), 
+                                           # get the standard error
+                                           #for bird density 
+                                           # for each cover class
+                                           normality_stat = ad.test(birdDensity)$statistic, 
+                                           normality_p = tryCatch(ad.test(birdDensity)$p.value, 
+                                                                error = function(cond) { return(NaN) }),
+#ifelse(mean(birdDensity) > 0,                                    
+#tryCatch(ad.test(birdDensity)$p.value,
+#error = function(cond){return(NA)}), NA),
+                                           
+                                           unimodality_stat =   dip.test(birdDensity)$statistic,
+                                           unimodality_p =   dip.test(birdDensity)$p.value,
+                                            birdSp = bird),
+                                     by = list(forestedStatus, 
+                                               landForClass)]
+    
+    birdStats <- unite(birdStats, 
+                       uniqueClasses, 
+                       c(forestedStatus, 
+                         landForClass), 
+                       remove=FALSE)
+
+    return(birdStats)
+  })
+  
+  names(birdPreds1D) <- birdList
+
+  #demonstrate what first lines of a birdPreds1D df looks like
+head(birdPreds1D$OVEN) 
+
+```
+
+```{r savebirdPreds1D}
+
+#save the output birdPreds1D tables
+
+   save(birdPreds1D, 
+        file =  file.path(outputFolderBirdPreds, "birdPreds1D.Rdata"))  
+   #load(file.path(outputFolderBirdPreds, "birdPreds1D.Rdata"))
+   
+```
+ 
+
+
+# Explore the produced 1D bird density predictions and statistics
+
+
+### Examine proportion of normality and unimodality tests passed
+
+Makes two summary tables one by bird (assumptionsByBird1D) and one by cover class (assumptionsByClass1D), giving the proportion of normality and unimodality tests passed (where the p-value is greater than 0.05).
+
+```{r getAssumptionsSummary1D}
+
+
+
+#make single dataframe 
+birdPreds1DSingleFrame <- rbindlist(birdPreds1D)
+summary(birdPreds1DSingleFrame)
+
+#Get table of binary normality and unimodality 
+#If p value is less than or equal to 0.05 it fails the test and is not considered normal/unimodal
+#fail = 0, pass = 1
+assumpTab1D <- birdPreds1DSingleFrame[,c(1,2,9, 11, 12)]
+assumpTab1D$normal <- NA
+assumpTab1D$normal[assumpTab1D$normality_p < 0.05] <- 0
+assumpTab1D$normal[assumpTab1D$normality_p == 0.05] <- 0
+assumpTab1D$normal[assumpTab1D$normality_p > 0.05] <- 1
+
+
+assumpTab1D$unimodal <- NA
+assumpTab1D$unimodal[assumpTab1D$unimodality_p < 0.05] <- 0
+assumpTab1D$unimodal[assumpTab1D$unimodality_p == 0.05] <- 0
+assumpTab1D$unimodal[assumpTab1D$unimodality_p > 0.05] <- 1
+assumpTab1D <- assumpTab1D[,c(1,2,5,6,7)]
+assumpTab1D
+
+#get table of prop of birds with p values under 0.05 per class
+ assumptionsByClass1D <- assumpTab1D[order(uniqueClasses)                                                                   ][,list(noBirds = .N,                                                                 propBirdsNormal = mean(normal),
+                                              propBirdsUnimodal = mean(unimodal),
+                                              binningType = "1DBins"),
+                                              by = uniqueClasses]
+
+  assumptionsByClass1D
+
+
+#get table of birds giving prop of classes with p values under 0.05
+ assumptionsByBird1D <- assumpTab1D[order(birdSp)                                                                   ][,list(noClasses = .N,                                                               propClassesNormal = mean(normal),
+                                               propClassesUnimodal = mean(unimodal),
+                                               binningType = "1DBins"),                                               by = birdSp]
+  assumptionsByBird1D
+```
+
+
+
+### Plot mean bird density by cover class with SE bars
+
+Creates list of bar charts, one for each bird on the birdList, giving the mean bird density per class. 
+
+```{r plotbirdPreds1D- single bird}
+
+plotsMeanBirdDensity <- lapply(X = birdList, FUN = function(bird){
+
+  singleBirdStats <- eval(parse(text=paste("birdPreds1D$", bird, sep = "")))
+
+  plotMeanBirdDensity <- ggplot(data = singleBirdStats,
+                              aes(x = uniqueClasses,
+                                  y = meanBirdDensity,
+                                  fill = forestedStatus)) +
+    geom_bar(stat = "identity",
+             width = 0.7) +
+        geom_errorbar(aes(ymin = meanBirdDensity - seBirdDensity, ymax = meanBirdDensity + seBirdDensity),
+                  width = .20) +
+    theme_classic() +
+    ggtitle(paste0("Mean ", bird, " density by cover class")) +
+    xlab("Cover Class") +
+    ylab("Mean Density") +
+   scale_x_discrete(labels=c("0_0" = "Forest", "0_1" = "Water/Ice", "0_2" = "Wetland", "0_3" = "Anthro/Exposed", "0_4" = "Grass/Crop" , "0_5" = "Shrub", "0_6" = "Bryoid", "1_1" = "Black Spruce", "1_2" = "Black Spruce Wet", "1_3" = "Conifer Mix", "1_4" = "Deciduous", "1_5" = "Mixed", "1_6" = "Pine", "1_7" = "White Spruce")) +
+    scale_fill_manual(values=c('goldenrod2', "royalblue3"),
+                      labels = c("Non-forest raster", "Forest raster")) +
+    theme(title = element_text(size = 14),
+          legend.title = element_blank(),
+          legend.position="bottom",
+          axis.text.x = element_text(size = 10, angle = 45, hjust = 1),
+          axis.title = element_text(size = 12))
+
+  plotMeanBirdDensity
+return(plotMeanBirdDensity)
+
+})
+
+names(plotsMeanBirdDensity) <- birdList
+
+#show an example
+plotsMeanBirdDensity$OVEN
+
+
+
+```
+
+Creates plotMeanBirdDensity, a single bar chart showing mean bird density by class for four selected bird species.
+
+```{r plotbirdPreds1D- multiple birds}
+
+
+#make dataframe of birds you want to include
+birdPreds1DSingleFrame <- rbind(birdPreds1D$BARS, birdPreds1D$OSFL, birdPreds1D$OVEN, birdPreds1D$RUBL)
+
+#Make plot                    
+  plotMeanBirdDensity <- ggplot(data = birdPreds1DSingleFrame, 
+                              aes(x = uniqueClasses, 
+                                  y = meanBirdDensity,
+                                  fill = forestedStatus)) +
+    facet_wrap(~ birdSp, scales= 'free_y') +
+    geom_bar(stat = "identity", 
+             width = 0.7) +
+        geom_errorbar(aes(ymin = meanBirdDensity - seBirdDensity, ymax = meanBirdDensity + seBirdDensity), 
+                  width = .20) + 
+    theme_classic() +
+    ggtitle("Mean density by cover class") +
+    xlab("Cover Class") +
+    ylab("Mean Density") +
+   scale_x_discrete(labels=c("0_0" = "Forest", "0_1" = "Water/Ice", "0_2" = "Wetland", "0_3" = "Anthro/Exposed", "0_4" = "Grass/Crop" , "0_5" = "Shrub", "0_6" = "Bryoid", "1_1" = "Black Spruce", "1_2" = "Black Spruce Wet", "1_3" = "Conifer Mix", "1_4" = "Deciduous", "1_5" = "Mixed", "1_6" = "Pine", "1_7" = "White Spruce")) +
+    scale_fill_manual(values=c('goldenrod2', "royalblue3"), 
+                      labels = c("Non-forest raster", "Forest raster")) +
+    theme(title = element_text(size = 14),
+          strip.text.x = element_text(
+        size = 12),
+        legend.title = element_blank(),
+          legend.position="bottom",
+          axis.text.x = element_text(size = 10, angle = 45, hjust = 1), 
+          axis.title = element_text(size = 12))
+        
+plotMeanBirdDensity
+
+```
+
+
+### Plot variance in bird density by cover class 
+
+Creates list of bar charts, one for each bird on the birdList, giving the variance in bird density per class. 
+
+```{r plotVarBirdDensity}
+
+plotsVarBirdDensity <- lapply(X = birdPreds1D,
+                              FUN = function(singleBirdStats){
+
+plotVarBirdDensity <- ggplot(data = singleBirdStats, 
+                             aes(x =uniqueClasses, 
+                                 y = varBirdDensity, 
+                                 fill = forestedStatus)) + 
+   theme_classic() +
+  ggtitle(paste0("Variance in bird density by cover class, BBWO")) +
+  xlab("Cover Class") +
+    theme(axis.text = element_text(size = 6)) +
+  geom_bar(stat = "identity", 
+           width = 0.7) 
+
+return(plotVarBirdDensity)
+
+})
+
+#show an example
+plotsVarBirdDensity$OVEN
+
+```
+
+
+
+### Examine the data using a density plot
+
+Creates a density plot for a single species, selected from the birdDatasets, for each class.
+
+
+```{r getDensityPlot GGPLOT, echo=TRUE}
+
+birdCoverDensity <- birdDatasets$OVEN
+
+class.labs <- c("Forested", "Water/Ice", "Wetland", "Anthro/Exposed", "Grass/Crop", "Shrub", "Bryoid", "Black Spruce", "Black Spruce Wet", "Conifer Mix", "Deciduous", "Mixed", "Pine", "White Spruce")
+names(class.labs) <- c("0_0", "0_1", "0_2", "0_3", "0_4", "0_5", "0_6", "1_1", "1_2", "1_3", "1_4", "1_5", "1_6", "1_7")
+
+
+  densityPlot <-  ggplot(birdCoverDensity, aes(x=birdDensity, fill=factor(forestedStatus))) + 
+  geom_density() +
+    facet_wrap( ~ uniqueClasses, 
+    labeller = labeller(uniqueClasses = class.labs), scales = "free_y") +
+    theme_classic() +
+  ggtitle("Density plots for OVEN") +
+    xlab("Predicted bird density")  +
+    ylab("Density of value") +
+    scale_fill_manual(values=c('goldenrod2', "royalblue3"), labels = c("Non-forest raster", "Forest raster")) + 
+    theme(title = element_text(size = 14),
+          strip.text.x = element_text(
+        size = 12),
+        legend.title = element_blank(),
+          legend.position="bottom",
+          axis.text.x = element_text(size = 10), 
+          axis.title = element_text(size = 12))
+  
+   densityPlot 
+   
+   
+```
+
+
+
+
+
+
+# 2D POST-HOC BINNING
+
+Here a GBM is used to create the birdMatricies list of matricies of predicted bird density by age and cover class, one for each bird with a birdDataset table. This is carried out for classes included in the forClassRaster only.
+
+birdGBMSummaries for each bird is also produced, giving a table of relative influence for the two factors (relInfGBM), the Friedman's H-statistic (FriedmansHStat), and plot of the GBM (plotGBM). 
+
+Parameters: ageGrouping, maxAgeClass, nTrees 
+
+ 
+```{r fitBRT }
+
+#PARAMETER: define how you want the age classes to be 
+ageGrouping <- 20 #how many years included per age class
+maxAgeClass <- 10 #what the oldest age class will be (everything older will be included in this class)
+nTrees <- 5000 #number of trees for gbm
+
+birdMatriciesAndSummaries <- lapply(X = birdDatasets, FUN = function(birdDF) {
+
+#separate out data table rows that are forested
+forestedDF <- birdDF[forestedStatus == "1"]
+forestedDF <- forestedDF[, c(1,3,4)]
+forestedDF$age <- as.integer(forestedDF$age)
+forestedDF <- droplevels(forestedDF)
+
+#get rid of any rows with NA for age
+forestedDF <- na.omit(forestedDF, cols = "age")
+
+#fit gbm
+gbmFitted <- gbm::gbm(formula = birdDensity ~ ., 
+                      distribution = "gaussian",
+                      data = forestedDF,
+                      interaction.depth = 2,
+                      n.trees = nTrees,
+                      shrinkage = 0.3,
+                      n.minobsinnode = 5,
+                      bag.fraction = .80, 
+                      train.fraction = 1,
+                      verbose = TRUE) #same number of trees as used in predict.gbm
+
+
+plotGBM <- gbm::plot.gbm(gbmFitted, i.var = c(1,2))
+plot(plotGBM)
+
+FriedmansHStat <- gbm::interact.gbm(gbmFitted, 
+                                    data = forestedDF, 
+                                    i.var = c(1,2), 
+                                    n.trees = nTrees)
+print(FriedmansHStat)
+#print summary of relative influence by the factors
+par(mar = c(5, 8, 1, 1))
+relInfGBM <- summary(gbmFitted, method = relative.influence)
+relInfGBM
+print(relInfGBM)
+
+summaryGBM <- c(relInfGBM, FriedmansHStat, plotGBM)
+#generate prediction df using expand(?)
+maxAge <- max(forestedDF$age)
+allAges <- c(1:maxAge)
+birdPredictDF <- forestedDF %>% expand(landForClass, allAges)
+names(birdPredictDF) <- c("landForClass", "age")
+
+#do prediction 
+#(object, newdata, n.trees, type = "link", single.tree = FALSE,...)
+gbmPred <- gbm::predict.gbm(object = gbmFitted,
+                            newdata = birdPredictDF,
+                            n.trees = nTrees,
+                            type = "link", 
+                            single.tree = FALSE)  
+  
+noAgeClasses <- maxAge/ageGrouping
+ageClasses <- rep(1:noAgeClasses, each = ageGrouping)
+ageClasses <- ifelse(ageClasses < maxAgeClass, ageClasses, maxAgeClass)
+gbmPredDF <- cbind(birdPredictDF, gbmPred, ageClasses)
+gbmPredDF$ageClasses <- as.factor(gbmPredDF$ageClasses)
+gbmPredDF$landForClass <- as.factor(gbmPredDF$landForClass)
+gbmPredDT <- as.data.table(gbmPredDF)
+#TODO in the future add weight averages by gbm prediction variance
+# gbmPredDF <- aggregate( gbmPred ~ ageClasses * landForClass, gbmPredDF, mean )
+gbmPredDT <- gbmPredDT[order(list(landForClass, ageClasses))  
+                             ][,list(gbmPred = mean(gbmPred)), 
+                               by = list(landForClass, ageClasses)]
+ 
+
+#form matrix with landForClass as y axis and age as x axis
+birdMatrix <- reshape2::acast(gbmPredDT, 
+                              landForClass~ageClasses, 
+                              value.var= "gbmPred")
+
+matrixAndSummary <- list(birdMatrix, summaryGBM) 
+names(matrixAndSummary) <- c("birdMatricies", "summaryGBM")
+
+print("matrix and influence summary complete")
+
+      return(matrixAndSummary)
+   
+    })
+
+#separate matricies from summaries
+birdMatricies <- lapply(X = birdList, FUN = function(bird) {
+
+print(bird)
+birdMatrix <-  eval(parse(text=paste("birdMatriciesAndSummaries$", bird, "$birdMatricies", sep = ""))) 
+
+      return(birdMatrix)
+   
+    })
+names(birdMatricies) <- birdList
+save(birdMatricies, 
+        file =  file.path(outputFolderBirdPreds, "birdMatricies.Rdata"))  
+   #load(file.path(outputFolderBirdPreds, "birdMatricies.Rdata"))
+birdMatricies$OVEN
+
+
+# #separate out summaries
+# birdGBMSummaries <- lapply(X = birdList, FUN = function(bird) {
+# print(bird)
+# summaryGBM <-  eval(parse(text=paste("birdMatriciesAndSummaries$", bird, "$summaryGBM", sep = ""))) 
+#   birdSp <- rep(paste(bird), nrow(summaryGBM))
+#   influenceGBM <- cbind(summaryGBM, birdSp)
+#       return(influenceGBM)
+#        })
+# names(birdGBMSummaries) <- birdList
+
+
+```
+
+
+### Create birdPreds object
+
+Here birdPreds is produced. It gives the 1D and 2D bird density predictions and a table specifying the age class definitions.  
+
+```{r packageOutputResults }
+
+# create table defining age classes for forested areas
+
+#use the first data table on the birdDatasets list 
+singleBirdDT <- birdDatasets[[1]]
+
+#separate out data table rows that are forested 
+forestedDT <- singleBirdDT[forestedStatus == "1"]
+forestedDT <- droplevels(forestedDT)
+#get rid of any rows with NA for age
+forestedDT <- na.omit(forestedDT, cols = "age")
+
+# create table defining age classes
+maxAge <- max(forestedDT$age) #find max age of forest
+allAges <- c(0:maxAge) #make vector counting from 1 to to max age
+agesOverMaxAgeClass <- maxAge-(maxAgeClass*ageGrouping) 
+ageClasses <- c(1, rep(1:maxAgeClass, each = ageGrouping), rep(maxAgeClass, times = agesOverMaxAgeClass)) #make vector of age classes to correspond with the vector allAges
+ageClassDefs <- cbind(allAges,ageClasses) 
+ageClassDefs <- as.data.table(ageClassDefs) # put together in ageClassDefs data table
+ageClassDefs <- ageClassDefs[, ageClasses:=as.character(ageClasses)] 
+
+
+#make list object of all outputs needed for Mapping Module 
+birdPreds <- list(birdMatricies, birdPreds1D, ageClassDefs) 
+names(birdPreds) <- c("birdMatricies", "birdPreds1D", "ageClassDefs")
+
+```
+
+```{r saveBirdPreds}
+
+   save(birdPreds, 
+        file =  file.path(outputFolderBirdPreds, "birdPreds.Rdata"))  
+   #load(file.path(outputFolderBirdPreds, "birdPreds.Rdata"))
+   
+```
+
+
+
+# Examine 2D Binning Statistics and Outputs
+
+
+### 2D Stats table
+
+Parameter: minStatsSample
+
+```{r 2DStats }
+
+### PARAMETER: exclude any classes from table that have a sample size smaller than minStatsSample
+minStatsSample <- 100 
+
+#create birdStats2D (MODULE OUTPUT), a list of lists giving a birdStats2D data table and vector classesNotPresent for each bird species on the birdList.
+birdStats2D <- lapply(X = birdList, FUN = function(bird) {
+
+  print(bird)
+forestedDT <-  eval(parse(text=paste("birdDatasets$", bird, sep = ""))) 
+#separate out data table rows that are forested from the raw birdDataset 
+forestedDT <- forestedDT[forestedStatus == "1"]
+forestedDT <- droplevels(forestedDT)
+
+#get rid of any rows with NA for age
+forestedDT <- na.omit(forestedDT, cols = "age")
+
+#get age classes for each row using the ageClassDefs table
+ageClass <- forestedDT[, age]
+ageClass <- as.data.table(ageClass)
+ageClass[] <- lapply(ageClass, function(x) ageClassDefs$ageClasses[match(x, ageClassDefs$allAges)])
+#add the ageClass to the forestedDT 
+birdDataNew <- cbind(forestedDT, ageClass)
+
+#create new column, landAgeClass, giving the uniqueLandClass and ageClass combined
+birdDataNew <- unite(birdDataNew, landAgeClass, c(uniqueClasses, ageClass), sep= ".", remove=FALSE)
+
+#produce data table of statistics on the bird Data based on the 2D bins
+singleBirdStats2D <- birdDataNew[order(landAgeClass) # order the rows by the land cover class
+                                   ][,list(                             classCount = .N, # get the number of cells each cover class
+                                           meanBirdDensity = mean(birdDensity), #get mean bird density
+                                           varBirdDensity = var(birdDensity), # get the variance for bird density for each class
+                                           seBirdDensity = std.error(birdDensity), # get the standard error for bird density for each  class
+                                           normality.p = tryCatch(ad.test(birdDensity)$p.value,error = function(cond) { return(NaN) }), #ifelse(mean(birdDensity) > 0, tryCatch(ad.test(birdDensity)$p.value,error = function(cond){return(NA)}), NA),
+                                           unimodality.p =   dip.test(birdDensity)$p.value,
+                                           birdSp = bird),
+                                     by = list(landAgeClass)]
+
+#exclude any classes from table that have a sample size smaller than minStatsSample, a parameter
+singleBirdStats2D <- subset(singleBirdStats2D, classCount > minStatsSample)
+
+# #### get list of missing classes
+# landAgeClassesPresent <- unique(singleBirdStats2D$landAgeClass) #get classes that are represented in birdStats2D
+# 
+# #get all classes possible
+# landClasses <- rep(unique(birdDataNew$uniqueClasses), times = maxAgeClass)
+# landClasses <- as.data.table(landClasses)
+# ageClassReps <- rep(1:maxAgeClass, times = length(unique(birdDataNew$uniqueClasses)))
+# ageClassReps <- as.data.table(ageClassReps)
+# allPossibleClasses <- cbind(landClasses, ageClassReps)
+# allPossibleClasses <-  unite(allPossibleClasses, allPossibleClasses, c(landClasses, ageClassReps), sep= ".", remove=FALSE)
+# 
+# #get the classes not present in birdStats2D
+# classesNotPresent <- setdiff(allPossibleClasses$allPossibleClasses, landAgeClassesPresent)
+# 
+# ##make list object of all stats outputs
+# birdStatsList2D <- list(singleBirdStats2D, classesNotPresent)
+# names(birdStatsList2D) <- c("birdStats2D", "classesNotPresent")
+
+# return(birdStatsList2D)
+
+return(singleBirdStats2D)
+   
+    })
+
+names(birdStats2D) <- birdList
+head(birdStats2D$OVEN)
+
+```
+
+```{r saveBirdStats2D}
+
+   save(birdStats2D, 
+        file =  file.path(outputFolderBirdPreds, "birdStats2D.Rdata"))  
+   #load(file.path(outputFolderBirdPreds, "birdStats2D.Rdata"))
+   
+
+```
+
+
+
+### Examine normality and unimodality of 2D bins
+
+Makes two summary tables one by bird (assumptionsByBird2D) and one by cover class/age class combination (assumptionsByClass2D), giving the proportion of normality and unimodality tests passed (where the p-value is greater than 0.05).
+
+```{r getAssumptionsSummary2D}
+
+#make single dataframe of 2D stats
+birdStats2DSingleFrame <- rbindlist(birdStats2D)
+head(birdStats2DSingleFrame)
+
+#Get table of binary normality and unimodality 
+assumpTab2D <- birdStats2DSingleFrame[,c(1,6,7,8)]
+assumpTab2D$normal <- NA
+assumpTab2D$normal[assumpTab2D$normality < 0.05] <- 0
+assumpTab2D$normal[assumpTab2D$normality == 0.05] <- 0
+assumpTab2D$normal[assumpTab2D$normality > 0.05] <- 1
+
+
+assumpTab2D$unimodal <- NA
+assumpTab2D$unimodal[assumpTab2D$unimodality < 0.05] <- 0
+assumpTab2D$unimodal[assumpTab2D$unimodality == 0.05] <- 0
+assumpTab2D$unimodal[assumpTab2D$unimodality > 0.05] <- 1
+assumpTab2D <- assumpTab2D[,c(1,4,5,6)]
+assumpTab2D
+
+#get table of prop of birds with p values under 0.05 per class
+ assumptionsByClass2D <- assumpTab2D[order(landAgeClass)                                                                   ][,list(noBirds = .N,                                                                 propBirdsNormal = mean(normal),
+                                              propBirdsUnimodal = mean(unimodal),
+                                              binningType = "2DBins"),
+                                              by = landAgeClass]
+
+  assumptionsByClass2D
+
+
+#get table of birds giving prop of classes with p values under 0.05
+ assumptionsByBird2D <- assumpTab2D[order(birdSp)                                                                   ][,list(noClasses = .N,                                                               propClassesNormal = mean(normal),
+                                               propClassesUnimodal = mean(unimodal),
+                                               binningType = "2DBins"),                                               by = birdSp]
+  assumptionsByBird2D
+```
+
+
+### Graph 2D matrix predictions for multiple birds 
+
+Here a graph of 2D matrix predictions of bird density by age and forest class is plotted for four bird species.
+
+```{r graph matrix by class and age - multiple birds }
+
+# New facet label names for forest classes
+class.labs <- c("Black Spruce", "Black Spruce Wet", "Conifer Mix", "Deciduous", "Mixed", "Pine", "White Spruce")
+names(class.labs) <- c("1", "2", "3", "4", "5", "6", "7")
+
+matrixAsTables <- lapply(X = birdList, FUN = function(bird){ 
+
+  matrix <-  eval(parse(text=paste("birdPreds$birdMatrices$", bird, sep = "")))
+
+
+  tab <- melt(matrix)
+  colnames(tab) <- c( "forClass","ageClass", "birdDensityPred")
+  
+
+  birdSp <- rep(paste(bird), nrow(tab))
+  tab <- cbind(tab, birdSp = birdSp) 
+  print(tab)
+
+return(tab)
+ })
+
+names(matrixAsTables) <- birdList
+
+#make dataframe of birds you want to include
+dataFrameForGraph <- rbind(matrixAsTables$BARS, matrixAsTables$CAWA, matrixAsTables$OVEN, matrixAsTables$RUBL)
+ 
+
+plotMeanBirdDensity2D <- ggplot(data = dataFrameForGraph, 
+                                aes(fill= ageClass, y= birdDensityPred, x= ageClass)) + 
+    geom_bar(position = "dodge", stat = "identity") +
+    facet_grid( birdSp ~ forClass, 
+    labeller = labeller(forClass = class.labs), 
+    scales="free_y") +
+    theme_classic() +
+  ggtitle("Predicted bird density by forest and age class") +
+    xlab("Age Class")  +
+    ylab("Predicted Bird Density") +
+theme(title = element_text(size = 14),
+      strip.text.x = element_text(
+        size = 11.5),
+      strip.text.y = element_text(
+        size = 11.5),
+      legend.position = "NULL",
+      axis.text.x = element_text(size = 10), 
+      axis.title = element_text(size = 12)) 
+  plotMeanBirdDensity2D
+  
+
+   
+```
+
+
+Here a graph of 2D matrix predictions of bird density by age and forest class is plotted for a single.
+
+```{r graph matrix by class and age  - single bird}
+
+# New facet label names for forest classes
+class.labs <- c("Black Spruce", "Black Spruce Wet", "Conifer Mix", "Deciduous", "Mixed", "Pine", "White Spruce")
+names(class.labs) <- c("1", "2", "3", "4", "5", "6", "7")
+
+
+  matrix <- birdPreds$birdMatrices$OVEN
+#matrix <- birdMatrix 
+tab <- melt(matrix)
+  colnames(tab) <- c( "forClass","ageClass", "birdDensityPred")
+  tab
+
+
+plotMeanBirdDensity2D <- ggplot(data = tab, 
+                                aes(fill= ageClass, y= birdDensityPred, x= ageClass)) + 
+    geom_bar(position = "dodge", stat = "identity") +
+    facet_grid(~ forClass, 
+    labeller = labeller(forClass = class.labs)) +
+    theme_classic() +
+  ggtitle("Predicted bird density by forest and age class, OVEN") +
+    xlab("Age Class")  +
+    ylab("Predicted Bird Density") +
+theme(legend.position = "NULL")
+  plotMeanBirdDensity2D
+  
+
+```
+
+
+### Plot relative influence for age and forest class
+
+Here a graph of the gbm relative influence for age and cover class is plotted.
+
+```{r make graph of birdGBMSummaries}
+
+#  birdGBMSummariesSingleFrame <- rbindlist(birdGBMSummaries)
+# head(birdGBMSummariesSingleFrame)
+#  
+#  
+#    plotInfluence <- ggplot(data = birdGBMSummariesSingleFrame, 
+#                                 aes(fill= var, y= rel.inf, x= birdSp)) + 
+#     geom_bar(position = "dodge", stat = "identity") +
+#     ggtitle("Relative influence of factors by GBM") +
+#     xlab("Species")  +
+#     ylab("Relative Influence") +
+#     theme_classic() + 
+#     #scale_fill_manual(values=c('skyblue1', "springgreen4"), 
+#                       #labels = c("1D", "2D")) +
+#     theme(title = element_text(size = 14),
+#           legend.title = element_blank(),
+#           legend.position= "bottom",
+#           axis.text.x = element_text(size = 10, angle = 45, hjust = 1), 
+#           axis.title = element_text(size = 12))
+# 
+#    plotInfluence
+   
+```
+
+
+ 
+ 
+ 
+ 
+# COMPARING 1D AND 2D POST-HOC BINNING
+
+
+### Comparing proportions of classes normal and unimodal
+
+Here we graph the proportion of forested classes that are normal and unimodal for 1D and 2D binning. 
+
+ 
+```{r graph assumptions}
+#get 1D bird assumptions for forested classes only
+assumptionsByBird1DFor <- assumpTab1D[forestedStatus == "1"]
+assumptionsByBird1DFor  <- droplevels(assumptionsByBird1DFor)
+assumptionsByBird1DFor <- assumptionsByBird1DFor[order(birdSp)                                                                   ][,list(noClasses = .N,                                                               propClassesNormal = mean(normal),
+                                               propClassesUnimodal = mean(unimodal),
+                                               binningType = "1DBins"),                                               by = birdSp]
+  assumptionsByBird1DFor
+
+  #make into talbe with 2D assumptions
+assumptionsbyBird <- rbind(assumptionsByBird1DFor,assumptionsByBird2D)  
+
+#normality plot
+   plotNormality <- ggplot(data = assumptionsbyBird, 
+                                aes(fill= binningType, y= propClassesNormal, x= birdSp)) + 
+    geom_bar(position = "dodge", stat = "identity") +
+    ggtitle("Proportion of Classes Normal for 1D and 2D post-hoc binning by species") +
+    xlab("Species")  +
+    ylab("Proportion of classes normal (p < 0.05)") +
+    theme_classic() + 
+    scale_fill_manual(values=c('skyblue1', "springgreen4"), 
+                      labels = c("1D", "2D")) +
+    theme(title = element_text(size = 14),
+          legend.title = element_blank(),
+          legend.position= "bottom",
+          axis.text.x = element_text(size = 10, angle = 45, hjust = 1), 
+          axis.title = element_text(size = 12))
+
+   plotNormality
+
+#unimodality plot
+   plotUnimodality <- ggplot(data = assumptionsbyBird, 
+                                aes(fill= binningType, y= propClassesUnimodal, x= birdSp)) + 
+    geom_bar(position = "dodge", stat = "identity") +
+    ggtitle("Proportion of classes unimodal for 1D and 2D post-hoc binning by species") +
+    xlab("Species")  +
+    ylab("Proportion of classes unimodal (p < 0.05)") +
+    theme_classic() + 
+    scale_fill_manual(values=c('skyblue1', "springgreen4"), 
+                      labels = c("1D", "2D")) +
+    theme(title = element_text(size = 14),
+          legend.title = element_blank(),
+          legend.position= "bottom",
+          axis.text.x = element_text(size = 10, angle = 45, hjust = 1), 
+          axis.title = element_text(size = 12))
+
+   plotUnimodality
+
+```
+
+
+### Paired t-test of unimodality and normality proportions
+
+
+```{r paired t-test of unimodality and normality props}
+ #Test if there is a difference in proportion of classes unimodal per bird using 1D vs 2D binning
+
+assumptionsbyBirdTTestUnimodal <- cbind(assumptionsByBird1DFor[,c(1,4)], assumptionsByBird2D[,4])
+ colnames(assumptionsbyBirdTTestUnimodal) <- c( "birdSp","propUnimodal1D", "propUnimodal2D")
+ diffUniModal <- assumptionsbyBirdTTestUnimodal$propUnimodal1D - assumptionsbyBirdTTestUnimodal$propUnimodal2D
+hist(diffUniModal,   
+     col="darkblue", 
+     main="Histogram of differences between 1D and 2D proportion of classes unimodal by bird",
+     xlab="Difference")
+assumptionsbyBird %>%
+  group_by(binningType) %>%
+  get_summary_stats(propClassesUnimodal, type = "mean_sd")
+unimodalityTTest <- t.test(propClassesUnimodal ~ binningType, data = assumptionsbyBird, paired = TRUE)
+unimodalityTTest
+
+
+ #Test if there is a difference in proportion of classes normal per bird using 1D vs 2D binning
+assumptionsbyBirdTTestNormal <- cbind(assumptionsByBird1DFor[,c(1,3)], assumptionsByBird2D[,3])
+ colnames(assumptionsbyBirdTTestNormal) <- c( "birdSp","propNormal1D", "propNormal2D")
+ diffNormal <- assumptionsbyBirdTTestNormal$propNormal1D - assumptionsbyBirdTTestNormal$propNormal2D
+hist(diffNormal,   
+     col="darkblue", 
+     main="Histogram of differences between 1D and 2D proportion of classes unimodal by bird",
+     xlab="Difference")
+assumptionsbyBird %>%
+  group_by(binningType) %>%
+  get_summary_stats(propClassesNormal, type = "mean_sd")
+normalityTTest <- t.test(propClassesNormal ~ binningType, data = assumptionsbyBird, paired = TRUE)
+normalityTTest
+```
+
+
+
