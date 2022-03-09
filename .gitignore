@@ -1,29 +1,49 @@
+# ignore everything (dirs, files, sub-dirs, sub-files)
+/*
+# but do not ignore the .gitignore file
+!.gitignore
+
+# do not ignore R projct
+!PHB.Rproj
+
+# do not ignore the following Rmd files
+!PHB.Rmd
+!MB.Rmd
+!dataExploration.Rmd
+
+# do not ignore the readme
+!README.md
+
+
+
+
+
 # History files
-.Rhistory
-.Rapp.history
+#.Rhistory
+#.Rapp.history
 # Session Data files
-.RData
+#.RData
 # User-specific files
-.Ruserdata
+#.Ruserdata
 # Example code in package build process
-*-Ex.R
+#*-Ex.R
 # Output files from R CMD build
-/*.tar.gz
+#/*.tar.gz
 # Output files from R CMD check
-/*.Rcheck/
+#/*.Rcheck/
 # RStudio files
-.Rproj.user/
+#.Rproj.user/
 # produced vignettes
-vignettes/*.html
-vignettes/*.pdf
+#vignettes/*.html
+#vignettes/*.pdf
 # OAuth2 token, see https://github.com/hadley/httr/releases/tag/v0.3
-.httr-oauth
+#.httr-oauth
 # knitr and R markdown default cache directories
-*_cache/
-/cache/
+#*_cache/
+#/cache/
 # Temporary files created by R markdown
-*.utf8.md
-*.knit.md
+#*.utf8.md
+#*.knit.md
 # R Environment Variables
-.Renviron
-LCC2005_V1_4a.tif
+#.Renviron
+
