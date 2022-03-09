@@ -178,11 +178,10 @@ patternNameBirdRaster <- "mosaic-" #choose naming pattern to look for
     filesToDownload <-
       googledrive::drive_ls(path = as_id(folderUrlBirdRaster), 
                             pattern = patternNameBirdRaster)
-    
-    print(filesToDownload$name)
+     print(filesToDownload$name)
 
 #Specify which bird species to input
-birdList <- c("BARS", "BBWA", "BBWO", "BTNW", "CAWA", "EVGR", "OSFL", "OVEN", "RUBL") 
+birdList <- sort(c("AMRO", "BARS", "BBWA", "BBWO", "BCCH", "CAWA", "CHSP", "DEJU", "EVGR", "GRAJ", "HAWO", "OSFL", "OVEN", "RBNU", "RCKI", "RUBL", "SWTH", "WTSP", "YBSA", "YEWA")) 
 ### "BAWW", "OVEN" , "CAWA", "ALFL", "AMCR", "AMGO", "AMPI", "AMRE", "AMRO", "ATSP", "ATTW", "BANS", "BAOR", "BARS", "BBMA", "BBWA", "BBWO", "BCCH", "BEKI", "BGGN", "BHCO", "BHVI", "BLBW", "BLJA", "BLPW", "BOBO", "BOCH", "BOWA", "BRBL", "BRCR", "BRTH", "BTBW", "BTNW", "BWWA",  "CCSP", "CEDW", "CHSP", "CLSW", "CMWA", "COGR", "CONW", "CORA", "COYE", "CSWA", "DEJU", "DOWO", "DUFL", "DUNL", "EABL", "EAKI", "EAPH", "EATO", "EAWP", "EUST", "EVGR", "FISP", "FOSP", "GCFL", "GCKI", "GCSP", "GCTH", "GRAJ", "GRCA", "GRSP", "GRYE", "GWWA", "HAFL", "HAWO", "HETH", "HOLA", "HOSP", "HOWR", "INBU", "KILL", "LALO", "LCSP", "LEFL", "LEYE", "LISP", "MAWA", "MOBL", "MODO", "MOWA", "NAWA", "NESP", "NOCA", "NOFL", "NOPA", "NOWA", "OCWA", "OSFL", "PAWA", "PHVI", "PIGR", "PISI", "PIWA", "PIWO", "PUFI", "RBGR", "RBNU", "RBWO", "RCKI", "RECR", "REVI", "RHWO", "ROPI", "RTHU", "RUBL", "RUGR", "RWBL", "SAVS", "SCTA", "SEWR", "SOGR", "SOSA", "SOSP", "SPGR", "SPSA", "SWSP", "SWTH", "TEWA", "TOSO", "TOWA", "TRES", "UPSA", "VATH", "VEER", "VESP", "WAVI", "WBNU", "WCSP", "WETA", "WEWP", "WIPT", "WISN", "WITU", "WIWA", "WIWR", "WOTH", "WTSP", "WWCR", "YBCU", "YBFL", "YBSA", "YEWA", "YHBL", "YRWA"
 
 
@@ -221,6 +220,7 @@ birdList <- c("BARS", "BBWA", "BBWO", "BTNW", "CAWA", "EVGR", "OSFL", "OVEN", "R
    
    birdRasters <- lapply(X = birdRasters, FUN = function(RasterLayer) {
     ## the function postProcesses the layer, cropping and masking it to a given study area and rasterToMatch, and saving it to a given destination path
+     
     proRaster <- reproducible::postProcess(RasterLayer, 
                              studyArea = studyArea,
                              rasterToMatch = rasterToMatch,
@@ -229,7 +229,7 @@ birdList <- c("BARS", "BBWA", "BBWO", "BTNW", "CAWA", "EVGR", "OSFL", "OVEN", "R
                              overwrite = TRUE)
     
     plot(proRaster, colNA="grey70") #check raster visually
-    
+    print(paste0(names(RasterLayer), " postprocessed"))
     return(proRaster)
   }) 
    
@@ -506,7 +506,6 @@ landscapeRasters <- raster::stack(landscapeRaster,
                                        ageRaster, 
                                        FNFRaster)
 
-
 birdDatasets <- lapply(X = birdList, FUN = function(bird){
     
     birdLayer <- eval(parse(text=paste("birdRasters$", bird, sep = "")))
@@ -535,21 +534,26 @@ birdDatasets <- lapply(X = birdList, FUN = function(bird){
     cellValues$forestedStatus <- as.factor(cellValues$forestedStatus)
     cellValues$uniqueClasses <- as.factor(cellValues$uniqueClasses)
     
+    nrowCV <- nrow(cellValues)
+    cellValues$birdSp <- rep(bird, nrowCV)
    
     print(paste(bird," dataset complete"))
     
     return(cellValues)
   })
 
-names(birdDatasets) <- names(birdRasters)
-for (i in names(birdDatasets)) {
-  attr(birdDatasets[[i]],"Species") <- i
-  
-}
+# # names(birdDatasets) <- names(birdRasters)
+# # for (i in names(birdDatasets)) {
+# #   attr(birdDatasets[[i]],"Species") <- i
+#   
+# }
+
+names(birdDatasets) <- birdList
 
 ## demonstrate what the first few lines of 
 ## one of the birdDatasets looks like
-head(birdDatasets$OVEN) 
+head(birdDatasets$OVEN)
+str(birdDatasets$OVEN)
 
 ```
 
@@ -744,7 +748,7 @@ Creates plotMeanBirdDensity, a single bar chart showing mean bird density by cla
 
 
 #make dataframe of birds you want to include
-birdPreds1DSingleFrame <- rbind(birdPreds1D$BARS, birdPreds1D$OSFL, birdPreds1D$OVEN, birdPreds1D$RUBL)
+birdPreds1DSingleFrame <- rbind(birdPreds1D$BARS, birdPreds1D$GRAJ, birdPreds1D$OVEN, birdPreds1D$RCKI)
 
 #Make plot                    
   plotMeanBirdDensity <- ggplot(data = birdPreds1DSingleFrame, 
@@ -790,7 +794,7 @@ plotVarBirdDensity <- ggplot(data = singleBirdStats,
                                  y = varBirdDensity, 
                                  fill = forestedStatus)) + 
    theme_classic() +
-  ggtitle(paste0("Variance in bird density by cover class, BBWO")) +
+  ggtitle(paste0("Variance in bird density by cover class")) +
   xlab("Cover Class") +
     theme(axis.text = element_text(size = 6)) +
   geom_bar(stat = "identity", 
@@ -864,6 +868,8 @@ maxAgeClass <- 10 #what the oldest age class will be (everything older will be i
 nTrees <- 5000 #number of trees for gbm
 
 birdMatriciesAndSummaries <- lapply(X = birdDatasets, FUN = function(birdDF) {
+  
+old <- Sys.time() #keep track of how long each bird takes
 
 #separate out data table rows that are forested
 forestedDF <- birdDF[forestedStatus == "1"]
@@ -940,6 +946,9 @@ names(matrixAndSummary) <- c("birdMatricies", "summaryGBM")
 
 print("matrix and influence summary complete")
 
+new <- Sys.time() - old # calculate difference
+  print(new) # print in nice format
+  
       return(matrixAndSummary)
    
     })
