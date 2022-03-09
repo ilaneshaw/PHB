@@ -1,0 +1,987 @@
+---
+title: "MB"
+author: "Isolde Lane Shaw"
+date: "1/24/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(digits=3)
+```
+
+
+# MAPPING THE 1D AND 2D POST-HOC BINNING PREDICTIONS 
+
+Here I create rasters showing the birdPreds predictions according to the classes given in the landscape rasters. 
+
+Note: can take significant memory
+
+```{r files needed mapBins, include=FALSE}
+
+# These rasters will be needed for this section
+load(file.path(downloadFolderForestClass, "forClassRaster.Rdata"))
+load(file.path(downloadFolderForestClass, "nonForRaster.Rdata"))
+load(file.path(downloadFolderForestClass, "ageRaster.Rdata"))
+load(file.path(outputFolderBirdPreds, "birdPreds.Rdata"))
+
+#I will need a birdList that includes only birds included in the birdPreds
+birdList <- birdList
+
+```
+ 
+ 
+# 1D mapBins
+
+### 1D mapBins - nonForRaster area only
+
+```{r 1D mapBins nonForested}
+
+#get non-Forest 1D data together
+nf1DPreds <- lapply(X = birdList, FUN = function(bird) {
+
+#separate out data table rows that are forested, get rid of unnecessary forestedStatus column
+nonforestedDF <- eval(parse(text=paste("birdPreds$birdPreds1D$", bird, sep = "")))  
+nonforestedDF <- nonforestedDF[forestedStatus == "0"]
+nonforestedDF <- nonforestedDF[ , c(3,5)]
+nonforestedDF <- droplevels(nonforestedDF)
+
+return(nonforestedDF)
+})
+
+names(nf1DPreds) <- birdList
+nf1DPreds
+
+#reclassify non forest raster to get map of 1D bird preds in non forested areas
+nf1DMaps <- lapply(X = birdList, FUN = function(bird){
+
+
+  nfBirdPreds <- eval(parse(text=paste("nf1DPreds$", bird, sep = "")))
+      
+#make numeric
+nfBirdPreds <- nfBirdPreds[, landForClass:=as.numeric(landForClass)]
+nfBirdPreds <- nfBirdPreds[, meanBirdDensity:=as.numeric(meanBirdDensity)]
+str(nfBirdPreds) #check
+
+#raster1DBins <- nonForRaster 
+raster1DBins <- reclassify(nonForRaster, nfBirdPreds)
+
+names(raster1DBins) <- paste(bird)
+plot(raster1DBins)
+
+print(paste(bird,"nf 1D map raster complete"))
+return(raster1DBins)
+    })
+
+  names(nf1DMaps) <- birdList
+
+
+```
+
+```{r save 1Dbins nonFor rasters}
+
+#as Rdata file
+
+   save(nf1DMaps,
+        file =  file.path(outputFolderBirdPredsRasters, "nf1DMaps.Rdata"))
+   # #load(file.path(outputFolderBirdPredsRasters, "nf1DMaps.Rdata"))
+
+#as tif files
+
+# 
+#  lapply(X = birdList, FUN = function(bird){
+#  
+#   raster <- eval(parse(text=paste("rasters1DBinsNF$", bird, sep = "")))
+#   names(raster) <- paste(bird)
+#   writeRaster(x = raster, filename = file.path(outputFolderBirdPredsRasters, 
+#                                                 paste(bird, "-1D-NF", sep = "")), 
+#                                                 format = "GTiff", 
+#                                                 overwrite = TRUE)
+#    
+#     })
+
+
+```
+
+
+## 1D mapBins - forClassRaster area only
+
+```{r 1D for maps}
+
+#get non-Forest 1D data together
+for1DPreds <- lapply(X = birdList, FUN = function(bird) {
+
+#separate out data table rows that are forested, get rid of unnecessary forestedStatus column
+forestedDF <- eval(parse(text=paste("birdPreds$birdPreds1D$", bird, sep = "")))  
+forestedDF <- forestedDF[forestedStatus == "1"]
+forestedDF  <- forestedDF [ , c(3,5)]
+forestedDF <- droplevels(forestedDF)
+
+return(forestedDF)
+})
+
+names(for1DPreds) <- birdList
+for1DPreds
+
+#reclassify forest class raster to give 1D bird prediction values for each bird sp
+for1DMaps <- lapply(X = birdList, FUN = function(bird){
+
+
+nfBirdPreds <- eval(parse(text=paste("for1DPreds$", bird, sep = "")))
+      
+#make numeric
+nfBirdPreds <- nfBirdPreds[, landForClass:=as.numeric(landForClass)]
+nfBirdPreds <- nfBirdPreds[, meanBirdDensity:=as.numeric(meanBirdDensity)]
+str(nfBirdPreds) #check
+
+#raster1DBins <- nonForRaster 
+raster1DBinsForest <- reclassify(forClassRaster, nfBirdPreds)
+
+names(raster1DBinsForest) <- paste(bird)
+plot(raster1DBinsForest)
+
+
+print(paste(bird,"for 1D map raster complete"))
+return(raster1DBinsForest)
+    })
+
+  names(for1DMaps) <- birdList
+
+
+```
+
+```{r save 1Dbins forest rasters}
+
+#as Rdata file
+save(for1DMaps,
+     file =  file.path(outputFolderBirdPredsRasters, "CASFRIfor1DMaps.Rdata"))
+#load(file.path(outputFolderBirdPredsRasters, "for1DMaps.Rdata"))
+
+#as tif files
+
+
+ # lapply(X = birdList, FUN = function(bird){
+ # 
+ #  raster <- eval(parse(text=paste("rasters1DBinsForest$", bird, sep = "")))
+ #  names(raster) <- paste(bird)
+ #  writeRaster(x = raster, filename = file.path(outputFolderBirdPredsRasters, 
+ #                                                paste(bird, "-1D-for", sep = "")), 
+ #                                                format = "GTiff", 
+ #                                                overwrite = TRUE)
+ #   
+ #    })
+
+
+```
+
+
+### Create composite map of 1D predictions for forClassraster areas and 1D predictions for nonForRaster areas
+
+```{r combine 1D for and nonfor rasters}
+
+
+for1DAndNf1DMaps <- lapply(X = birdList, FUN = function(bird){
+ 
+  raster1DBinsNF <- eval(parse(text=paste("nf1DMaps$", bird, sep = "")))
+  raster2DBinsFor <- eval(parse(text=paste("for1DMaps$", bird, sep = "")))
+  
+birdPredsRaster1D <- cover(x = raster2DBinsFor,
+                         y = raster1DBinsNF)
+                        
+names(birdPredsRaster1D) <- paste(bird)
+
+birdPredsRaster1D #visually check Raster
+plot(birdPredsRaster1D)
+
+
+
+print(paste(bird,"for 1D and nf 1D map complete"))
+return(birdPredsRaster1D)
+    })
+
+names(for1DAndNf1DMaps) <- birdList
+
+```
+
+```{r save for1DAndNf1DMaps}
+
+#as Rdata file
+   save(for1DAndNf1DMaps,
+        file =  file.path(outputFolderBirdPredsRasters, "for1DAndNf1DMaps.Rdata"))
+   #load(file.path(outputFolderBirdPredsRasters, "for1DAndNf1DMaps.Rdata"))
+
+#as tif files
+
+# 
+#  lapply(X = birdList, FUN = function(bird){
+#  
+#   raster <- eval(parse(text=paste("birdPredsRasters1D$", bird, sep = "")))
+#   names(raster) <- paste(bird)
+#   writeRaster(x = raster, filename = file.path(outputFolderBirdPredsRasters, 
+#                                                 paste(bird, "-1D-birdPreds", sep = "")), 
+#                                                 format = "GTiff", 
+#                                                 overwrite = TRUE)
+#    
+#     })
+
+
+```
+
+
+
+# 2D mapBins  
+
+Here I create a rasters of bird density using the 2D binning predictions for forested areas. 
+
+
+## Reclassify the ageRaster to ageClassRaster 
+
+First, the age raster needs to be reclassified into the age classes specified in the ageClassDefs table included in the birdPreds. 
+
+
+```{r make ageClassRaster}
+
+#reclassify forAgeRaster into a raster of forest age classes
+ageReClassTab <- birdPreds$ageClassDefs
+ageReClassTab <- ageReClassTab[ , ageClasses:=as.numeric(ageClasses)] #change data type of ageClassDefs
+str(ageReClassTab) #check
+ageClassRaster <- ageRaster #make copy of forAgeRaster to be reclassified
+ageClassRaster <- reclassify(ageClassRaster, ageReClassTab) #do the reclassification based on ageClassDefs
+names(ageClassRaster) <- "ageClassRaster" 
+ageClassRaster#check over the raster that has been reclassified
+plot(ageClassRaster)
+
+```
+
+
+### 2D mapBins - forClassRaster area only
+
+```{r for 2D maps }
+
+for2DMaps <- lapply(X = birdList, FUN = function(bird){
+
+# check that spatial extent is the same for ageClassraster and forClassraster
+extent(forClassRaster) == extent(ageClassRaster)
+
+#reform matrix
+matrix <- eval(parse(text=paste("birdPreds$birdMatrices$", bird, sep = "")))
+reclassTab2D <- melt(matrix)
+colnames(reclassTab2D) <- c( "forClass","ageClass", "birdDensityPred")
+
+#reclassify Raster according to reclassTab2D, ageClassRaster and forClassRaster
+raster2DBins <- raster(forClassRaster); raster2DBins[] = NA #make an empty NA raster the same as forClassRaster
+
+#make dataframe of all the data in forClassRaster and ageClassRaster and give each cell/row a new definition column, birdDensityPred, from reclassTab2d
+f = data.frame(forClass=forClassRaster[], ageClass=ageClassRaster[])
+vec = c(1:nrow(f))
+f[,3] = vec
+m = merge(f, reclassTab2D, all.x=TRUE)
+colnames(m)[3] = "ord"
+m = m[order(m$ord),]
+#populate raster2DBins with the birdDensityPred row of the table m
+raster2DBins[] = m$birdDensityPred
+
+names(raster2DBins) <- paste(bird)
+
+#check the new raster
+raster2DBins
+plot(raster2DBins) 
+
+ print(paste(bird,"for 2D map raster complete"))
+
+      return(raster2DBins)
+    })
+
+names(for2DMaps) <- birdList
+
+```
+
+```{r save for 2D maps }
+
+#as Rdata file
+
+   save(for2DMaps,
+        file =  file.path(outputFolderBirdPredsRasters, "CASFRIfor2DMaps.Rdata"))
+   # #load(file.path(outputFolderBirdPredsRasters, "for2DMaps.Rdata"))
+
+#as tif files
+
+# 
+#  lapply(X = birdList, FUN = function(bird){
+#  
+#   raster <- eval(parse(text=paste("rasters2DBins$", bird, sep = "")))
+#   names(raster) <- paste(bird)
+#   writeRaster(x = raster, filename = file.path(outputFolderBirdPredsRasters, 
+#                                                 paste(bird, "-2D-ForestRaster", sep = "")), 
+#                                                 format = "GTiff", 
+#                                                 overwrite = TRUE)
+#    
+#     })
+
+
+```
+
+
+### Create composite map of 2D predictions for forClassraster areas and 1D predictions for nonForRaster areas
+
+```{r combine 1D and 2D rasters}
+
+
+for2DAndNf1DMaps <- lapply(X = birdList, FUN = function(bird){
+  
+  raster1DBins <- eval(parse(text=paste("nf1DMaps$", bird, sep = "")))
+  raster2DBins <- eval(parse(text=paste("for2DMaps$", bird, sep = "")))
+  
+birdPredsRaster <- cover(x = raster2DBins,
+                         y = raster1DBins) 
+
+names(birdPredsRaster) <- paste(bird)
+
+birdPredsRaster #visually check Raster
+plot(birdPredsRaster)
+
+# writeRaster(x = birdPredsRaster, filename = file.path(outputFolderBirdPredsRasters, paste(bird, "-birdPredsRaster", sep = "")), format = "GTiff", overwrite = TRUE)
+
+print(paste(bird,"for 2D and nf 1D map raster complete"))
+return(birdPredsRaster)
+    })
+
+names(for2DAndNf1DMaps) <- birdList
+
+```
+
+```{r save for2DAndNf1DMaps}
+
+#as Rdata file
+
+   save(for2DAndNf1DMaps,
+        file =  file.path(outputFolderBirdPredsRasters, "for2DAndNf1DMaps.Rdata"))
+   #load(file.path(outputFolderBirdPredsRasters, "for2DAndNf1DMaps.Rdata"))
+
+#as tif files
+
+
+ # lapply(X = birdList, FUN = function(bird){
+ # 
+ #  raster <- eval(parse(text=paste("birdPredsRasters$", bird, sep = "")))
+ #  names(raster) <- paste(bird)
+ #  writeRaster(x = raster, filename = file.path(outputFolderBirdPredsRasters, 
+ #                                                paste(bird, "-birdPredsRaster2D", sep = "")), 
+ #                                                format = "GTiff", 
+ #                                                overwrite = TRUE)
+ #   
+ #    })
+ # 
+
+```
+
+
+
+
+# CREATION OF RESIDUAL RASTERS
+
+Here rasters are created that show the residual values between the original birdRasters and the mapBin rasters created from the post-hoc binning birdPreds predictions of bird density. 
+
+Note: can take significant memory
+
+```{r files needed create residual rasters, include=FALSE}
+
+# These rasters will be needed for this section
+load(file.path(downloadFolderBird, "birdRasters.Rdata"))
+load(file.path(outputFolderBirdPredsRasters, "for1DMaps.Rdata"))
+load(file.path(outputFolderBirdPredsRasters, "for2DMaps.Rdata"))
+load(file.path(outputFolderBirdPredsRasters, "for1DAndNf1DMaps.Rdata"))
+load(file.path(outputFolderBirdPredsRasters, "for2DAndNf1DMaps.Rdata"))
+
+#I will need a birdList that includes only birds included in the above lists
+birdList <- birdList
+
+```
+
+
+### Make 1D residual rasters - forClassRaster area only
+
+```{r getResiduals forest 1D}
+
+
+
+for1DRes <- lapply(X = birdList, FUN = function(bird){
+  
+  NM <- eval(parse(text=paste("birdRasters$", bird, sep = "")))
+  MB <- eval(parse(text=paste("for1DMaps$", bird, sep = "")))
+  
+res <- overlay(NM, MB, fun=function(x,y){return(x-y)})
+
+names(res) <- paste(bird)
+plot(res)
+
+print(paste(bird," forest 1D res raster complete"))
+return(res)
+    })
+
+names(for1DRes) <- birdList
+
+#as Rdata file
+
+   save(for1DRes,
+        file =  file.path(outputFolderBirdPredsRasters, "CASFRIfor1DRes.Rdata"))
+   # load(file.path(outputFolderBirdPredsRasters, "for1DRes.Rdata"))
+   
+```
+
+
+### Make 2D residual rasters - forClassRaster area only
+
+```{r getResiduals forest 2D}
+
+
+
+for2DRes <- lapply(X = birdList, FUN = function(bird){
+  
+  NM <- eval(parse(text=paste("birdRasters$", bird, sep = "")))
+  MB <- eval(parse(text=paste("for2DMaps$", bird, sep = "")))
+  
+res <- overlay(NM, MB, fun=function(x,y){return(x-y)})
+
+names(res) <- paste(bird)
+plot(res)
+
+print(paste(bird," forest 2D res raster complete"))
+return(res)
+    })
+
+names(for2DRes) <- birdList
+
+#as Rdata file
+
+   save(for2DRes,
+        file =  file.path(outputFolderBirdPredsRasters, "CASFRIfor2DRes.Rdata"))
+   # load(file.path(outputFolderBirdPredsRasters, "for2DRes.Rdata"))
+   
+
+```
+
+
+
+### Make residual rasters of composite 1D predictions for forClassraster areas and 1D predictions for nonForRaster areas
+
+```{r getResiduals for 1D and nf 1D }
+
+
+
+for1DAndNf1DRes <- lapply(X = birdList, FUN = function(bird){
+  
+  NM <- eval(parse(text=paste("birdRasters$", bird, sep = "")))
+  MB <- eval(parse(text=paste("for1DAndNf1DMaps$", bird, sep = "")))
+  
+res <- overlay(NM, MB, fun=function(x,y){return(x-y)})
+
+names(res) <- paste(bird)
+plot(res)
+
+print(paste(bird," for 1D and nf 1D res raster complete"))
+return(res)
+    })
+
+names(for1DAndNf1DRes) <- birdList
+
+#as Rdata file
+
+   save(for1DAndNf1DRes,
+        file =  file.path(outputFolderBirdPredsRasters, "for1DAndNf1DRes.Rdata"))
+   # load(file.path(outputFolderBirdPredsRasters, "for1DAndNf1DRes.Rdata"))
+   
+```
+
+
+### Make residual rasters of composite 2D predictions for forClassraster areas and 1D predictions for nonForRaster areas
+
+```{r getResiduals for2D and nf1D}
+
+
+
+for2DAndNf1DRes <- lapply(X = birdList, FUN = function(bird){
+  
+  NM <- eval(parse(text=paste("birdRasters$", bird, sep = "")))
+  MB <- eval(parse(text=paste("for2DAndNf1DMaps$", bird, sep = "")))
+  
+res <- overlay(NM, MB, fun=function(x,y){return(x-y)})
+
+names(res) <- paste(bird)
+plot(res)
+
+print(paste(bird," for2D and nf1D res raster complete"))
+return(res)
+    })
+
+names(for2DAndNf1DRes) <- birdList
+
+#as Rdata file
+
+   save(for2DAndNf1DRes,
+        file =  file.path(outputFolderBirdPredsRasters, "for2DAndNf1DRes.Rdata"))
+   # load(file.path(outputFolderBirdPredsRasters, "for2DAndNf1DRes.Rdata"))
+   
+```
+
+
+
+
+# VISUALISATION OF RASTERS
+
+
+
+```{r plot NMs maps and Res for comparaison}
+
+getResRasComparison <- function(birdName, phbRasterListName, resRasterListName) {
+
+  natMod <- eval(parse(text=paste("birdRasters$", birdName, sep = "")))
+  phbRas <- eval(parse(text=paste(phbRasterListName, "$", birdName, sep = "")))
+  resRas <- eval(parse(text=paste(resRasterListName, "$", birdName, sep = "")))
+ names(natMod) <- "National Model"
+ names(phbRas) <- "Post-Hoc Binning"
+ names(resRas) <- "Residuals"
+
+compRas <- raster::stack(natMod, phbRas, resRas)
+
+
+rasComparison <- gplot(compRas) + 
+                  geom_tile(aes(fill = value)) +
+                    facet_wrap(~ variable) +
+                    scale_fill_gradientn(colours = rev(terrain.colors(500)), na.value = "grey70") +
+  coord_equal() + 
+    ggtitle(paste0(birdName)) +
+     theme_classic() +
+  theme(legend.position = "bottom",
+        line = element_blank(),
+        panel.grid = element_blank(),
+        axis.title = element_blank(),
+        axis.text.y = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.ticks.x = element_blank(),
+        legend.key.width = unit(2, 'cm'))
+  #scale_fill_gradientn(colours=c("royalblue4", "orangered1", "springgreen4", "violetred",  "aquamarine1", "goldenrod4", "#0000FFFF","#FFFFFFFF","#FF0000FF"), na.value = "grey70")
+
+  return(rasComparison)
+}
+
+
+resRasComparison <- getResRasComparison(birdName = "BBWO", 
+                                  phbRasterListName = "for2DAndNf1DMaps",
+                                  resRasterListName = "for2DAndNf1DRes")
+
+resRasComparison
+```
+
+```{r plot NM and maps for comparason}
+
+getResRasComparison <- function(birdName, phbRaster1DListName, phbRaster2DListName) {
+
+  natMod <- eval(parse(text=paste("birdRasters$", birdName, sep = "")))
+  phbRas1D <- eval(parse(text=paste(phbRaster1DListName, "$", birdName, sep = "")))
+    phbRas2D <- eval(parse(text=paste(phbRaster2DListName, "$", birdName, sep = "")))
+  
+ names(natMod) <- "National Model"
+ names(phbRas1D) <- "Post-Hoc Binning 1D"
+  names(phbRas2D) <- "Post-Hoc Binning 2D"
+ 
+ 
+ 
+
+compRas <- raster::stack(natMod, phbRas1D, phbRas2D)
+
+
+rasComparison <- gplot(compRas) + 
+                  geom_tile(aes(fill = value)) +
+                    facet_wrap(~ variable) +
+                     scale_fill_gradientn(colours = rev(terrain.colors(500)), na.value = "grey70") +
+    coord_equal() + 
+    ggtitle(paste0(birdName)) +
+     theme_classic() +
+  theme(legend.position = "bottom",
+        line = element_blank(),
+        panel.grid = element_blank(),
+        axis.title = element_blank(),
+        axis.text.y = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.ticks.x = element_blank(),
+        legend.key.width = unit(2, 'cm')) 
+  #scale_fill_gradientn(colours=c( "white", "darkgreen"), na.value = "grey70")
+      #scale_fill_viridis_c(breaks = quantile(rank(df$z)),
+                       #labels = quantile(df$z))
+#"blue", "lightblue",  "lightgreen", "green", "yellow", "orange", "orangered1", "red", "violetred"
+  return(rasComparison)
+}
+
+
+resRasComparison <- getResRasComparison(birdName = "BARS", 
+                                  phbRaster1DListName = "for1DAndNf1DMaps",
+                                  phbRaster2DListName = "for2DAndNf1DMaps")
+
+resRasComparison
+
+
+# pal <- colorRampPalette(c("blue", "darkblue", "darkgreen", "lightgreen", "yellow", "orange", "red", "purple"))
+# 
+ plot(birdRasters$BARS, colNA="grey70")
+
+ plot(for2DAndNf1DMaps$BARS, colNA="grey70")
+ plot(for2DAndNf1DRes$BARS,  colNA="grey70")
+ plot(for2DRes$OVEN,  colNA="grey70")
+ plot(for1DRes$OVEN,  colNA="grey70")
+# 
+breaks_qt <- classInt::classIntervals(na.omit(getValues(birdRasters$OVEN)), n = 7, style = "quantile")
+plot(birdRasters$OVEN, breaks=breaks_qt$brks, col = topo.colors(7), colNA="grey70")
+breaks_qt <- classInt::classIntervals(na.omit(getValues(for2DAndNf1DMaps$OVEN)), n = 7, style = "quantile")
+plot(for2DAndNf1DMaps$OVEN, breaks=breaks_qt$brks, col = topo.colors(7), colNA="grey70")
+breaks_qt <- classInt::classIntervals(na.omit(getValues(for2DAndNf1DRes$OVEN)), n =7, style = "quantile")
+plot(for2DAndNf1DRes$OVEN, breaks=breaks_qt$brks, col = topo.colors(7), colNA="grey70")
+
+```
+
+```{r plot maps for comparison}
+
+getPlot1Dvs2D <- function(birdName,
+                          phbRasterListName1D, 
+                          phbRasterListName2D) {
+
+  # NM <- eval(parse(text=paste("birdRasters$", birdName, sep = "")))
+  ras1D <- eval(parse(text=paste(phbRasterListName1D, "$", birdName, sep = "")))
+  # ras1D <- overlay(NM, ras1D, fun=function(x,y){return(x-y)})
+  ras2D <- eval(parse(text=paste(phbRasterListName2D, "$", birdName, sep = "")))
+  #ras2D <- overlay(NM, ras2D, fun=function(x,y){return(x-y)})
+ names(ras1D) <- "Residuals post-hoc binning 1D"
+ names(ras2D) <- "Residuals post-hoc binning 2D"
+
+
+compRas <- raster::stack(ras1D, ras2D)
+
+
+rasComparison <- gplot(compRas) + 
+                  geom_tile(aes(fill = value)) +
+                    facet_wrap(~ variable) +
+                    scale_fill_gradientn(colours = rev(terrain.colors(500)), na.value = "grey70") +
+  coord_equal() + 
+    ggtitle(paste0(birdName)) +
+     theme_classic() +
+    theme(legend.position = "bottom",
+        line = element_blank(),
+        panel.grid = element_blank(),
+        axis.title = element_blank(),
+        axis.text.y = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.ticks.x = element_blank(),
+        legend.key.width = unit(2, 'cm')) 
+  
+  
+  return(rasComparison)
+}
+
+# plot1Dvs2DBBWO <- getPlot1Dvs2D(birdName = "BBWO", 
+#                             phbRasterListName1D = "resForest1D", 
+#                             phbRasterListName2D = "resForest2D")
+# plot1Dvs2DCAWA <- getPlot1Dvs2D(birdName = "CAWA", 
+#                             phbRasterListName1D = "resForest1D", 
+#                             phbRasterListName2D = "resForest2D")
+# 
+plot1Dvs2D <- getPlot1Dvs2D(birdName = "BARS",
+                            phbRasterListName1D = "for1DRes",
+                            phbRasterListName2D = "for2DRes")
+plot1Dvs2D
+# plot1Dvs2DRUBL <- getPlot1Dvs2D(birdName = "RUBL", 
+#                             phbRasterListName1D = "resForest1D", 
+#                             phbRasterListName2D = "resForest2D")
+
+#compareResRas <- gridExtra::grid.arrange(plot1Dvs2DBBWO, plot1Dvs2DCAWA, plot1Dvs2DOVEN, plot1Dvs2DRUBL) 
+```
+
+
+
+
+# ANALYSIS
+
+
+```{r getResidualsHistogram}
+
+resTabs <- lapply(X = birdList, FUN = function(bird){
+
+   ras1D <- eval(parse(text=paste("for1DRes$", bird, sep = "")))
+   ras2D <- eval(parse(text=paste("for2DRes$", bird, sep = "")))
+
+
+  
+  resVals1D <- data.table(getValues(ras1D))
+  resVals1D <- setnames( resVals1D,  "resVals")
+  resVals1D <- na.omit(resVals1D)
+  res1DLab <- rep("res1D", nrow(resVals1D))
+  resVals1D <- cbind(resVals1D, binningType = res1DLab)
+  
+  resVals2D <- data.table(getValues(ras2D))
+  resVals2D <- setnames(resVals2D,  "resVals")
+  resVals2D <- na.omit(resVals2D)
+  res2DLab <- rep("res2D", nrow(resVals2D))
+  resVals2D <- cbind(resVals2D, binningType = res2DLab)
+  
+  resVals <- rbind(resVals1D, resVals2D)
+  birdSp <- rep(paste(bird), nrow(resVals))
+  resVals <- cbind(resVals, birdSp = birdSp)
+  print(resVals)
+ 
+   return(resVals)
+})
+names(resTabs) <- birdList
+resTabs
+
+#as Rdata file
+
+   save(resTabs,
+        file =  file.path(outputFolderBirdPreds, "resTabs.Rdata"))
+   # load(file.path(outputFolderBirdPreds, "resTabs.Rdata"))
+
+resTabSingle <- rbind(resTabs$BARS, resTabs$OSFL, resTabs$OVEN, resTabs$RUBL)
+
+#as Rdata file
+
+   save(resTabSingle,
+        file =  file.path(outputFolderBirdPreds, "resTabSingle.Rdata"))
+   # load(file.path(outputFolderBirdPreds, "resTabSingle.Rdata"))
+
+# New facet label names for forest classes
+binningType.labs <- c("1D Binning", "2D Binning")
+names(binningType.labs) <- c("res1D", "res2D")
+   
+# make histogram of ages
+  resHist <-ggplot(data = resTabSingle, aes(x= resVals, fill=factor(binningType))) + 
+    geom_histogram() +
+    ggtitle("Histograms of residuals in forest raster areas") +
+     xlab("Residual Value")  +
+    ylab("Pixel Count") +
+    facet_grid( binningType ~ birdSp, 
+    labeller = labeller(binningType = binningType.labs), scales="free") +
+    scale_fill_manual(values=c('skyblue1', "springgreen4")) + 
+    theme_classic() +
+    theme(title = element_text(size = 14),
+      strip.text.x = element_text(
+        size = 11.5),
+      strip.text.y = element_text(
+        size = 11.5),
+      legend.position = "NULL",
+      axis.text.x = element_text(size = 10, angle = 45, hjust = 1),
+      axis.title = element_text(size = 12)) 
+  
+  resHist
+  
+
+
+
+
+
+```
+
+
+```{r get mean and spatial autocorrelation of residual data}
+
+
+residualStats <- lapply(X = birdList, FUN = function(bird){
+  
+  
+  res1D <- eval(parse(text=paste("for1DRes$", bird, sep = "")))
+  res2D <- eval(parse(text=paste("for2DRes$", bird, sep = "")))
+ 
+
+m1D <- mean(res1D[], na.rm = TRUE)
+m2D <- mean(res2D[], na.rm = TRUE)
+sa1D  <- raster::Moran(res1D)
+sa2D  <- raster::Moran(res2D)
+
+residualStats <- matrix(c( m1D, m2D,  sa1D, sa2D), ncol= 4, byrow=TRUE)
+colnames(residualStats) <- c( 'mean1D', 'mean2D', "spaAutocor1D", "spaAutocor2D")
+row.names(residualStats) <- bird
+print(paste(bird, " calculation complete"))
+return(residualStats)
+  
+    })
+
+residualStats <- do.call(rbind, residualStats)
+
+residualStats
+
+ save(CASFRIresidualStats,
+        file =  file.path(outputFolderBirdPreds, "residualStats.Rdata"))
+   # load(file.path(outputFolderBirdPreds, "residualStats.Rdata"))
+
+head(residualStats)
+
+
+
+```
+
+
+```{r plot means and spatial autocorrelation}
+
+
+   tab <- melt(residualStats[,1:2])
+   colnames(tab) <- c( "birdSp", "binType", "meanResidual")
+   tab
+
+
+plotMeanRes <- ggplot(data = tab, 
+                                aes(fill= binType, y= meanResidual, x= birdSp)) + 
+    geom_bar(position = "dodge", stat = "identity")+
+    ggtitle("Mean values of forest area residual rasters, by species") +
+    xlab("Species")  +
+    ylab("Mean") +
+    theme_classic() + 
+    scale_fill_manual(values=c('skyblue1', "springgreen4"), 
+                      labels = c("1D", "2D")) +
+    theme(title = element_text(size = 14),
+          legend.title = element_blank(),
+          legend.position="bottom",
+          axis.text.x = element_text(size = 10, angle = 45, hjust = 1), 
+          axis.title = element_text(size = 12))
+        
+
+
+plotMeanRes
+
+    
+ 
+ 
+
+
+# SPATIAL AUTOCORRELATION
+
+   tabSA <- melt(residualStats[,3:4])
+   colnames(tabSA) <- c( "birdSp", "binType", "spatialAutocorrelation")
+   tabSA
+
+
+plotSARes <- ggplot(data = tabSA, 
+                                aes(fill= binType, y= spatialAutocorrelation, x= birdSp)) + 
+    geom_bar(position = "dodge", stat = "identity") +
+    ggtitle("Moran test for spatial autocorrelation results for forest area residual rasters, by species") +
+    xlab("Species")  +
+    ylab("Spatial Autocorrelation") +
+    theme_classic() + 
+    scale_fill_manual(values=c('skyblue1', "springgreen4"), 
+                      labels = c("1D", "2D")) +
+    theme(title = element_text(size = 14),
+          legend.title = element_blank(),
+          legend.position= "bottom",
+          axis.text.x = element_text(size = 10, angle = 45, hjust = 1), 
+          axis.title = element_text(size = 12))
+plotSARes
+
+    
+  
+
+```
+
+
+```{r do spearman rank correlation test on mapped bins}
+
+spearmanStats <- lapply(X = birdList, FUN = function(bird){
+  
+  print(bird) 
+  
+  nmRas <- eval(parse(text=paste("birdRasters$", bird, sep = "")))
+   map1D <- eval(parse(text=paste("for1DMaps$", bird, sep = "")))
+   map2D <- eval(parse(text=paste("for1DMaps$", bird, sep = "")))
+
+  
+valsNM <- getValues(nmRas)
+vals1DMap <- getValues(map1D)
+vals2DMap <- getValues(map2D)
+valsMaps <- cbind(valsNM, vals1DMap, vals2DMap) 
+valsMaps <- na.omit(valsMaps)
+valsMaps <- as.data.table(valsMaps)
+head(valsMaps)
+#Check normality assumption 
+#Shapiro-Wilk normality test for all data
+# ad.test(valsMaps$valsNM) # => p = 0.1229
+# ad.test(valsMaps$vals1DMap) # => p = 0.09
+# ad.test(valsMaps$vals2DMap)
+
+# library("ggpubr")
+# ggqqplot(valsMaps$valsNM, ylab = "National Model Prediction")
+# ggqqplot(valsMaps$vals1DMap, ylab = "1D Map Prediction")
+# ggqqplot(valsMaps$vals2DMap, ylab = "2D Map Prediction")
+
+spearman1D <-cor(valsMaps$valsNM, valsMaps$vals1DMap,  method = "spearman")
+spearman1D
+spearman2D <-cor(valsMaps$valsNM, valsMaps$vals2DMap,  method = "spearman")
+spearman2D
+
+
+
+spearmanStats <- matrix(c( spearman1D, spearman2D), ncol= 2, byrow=TRUE)
+colnames(spearmanStats) <- c( 'spearman1D', 'spearman2D')
+row.names(spearmanStats) <- bird
+
+return(spearmanStats)
+
+    })
+
+spearmanStats <- do.call(rbind, spearmanStats)
+
+spearmanStats
+
+ save(spearmanStats,
+        file =  file.path(outputFolderBirdPreds, "spearmanStats.Rdata"))
+   # load(file.path(outputFolderBirdPreds, "spearmanStats.Rdata"))
+
+
+   tabST <- melt(spearmanStats[,1:2])
+   colnames(tabST) <- c( "birdSp", "binType", "spearmanTestStat")
+   tabST
+
+
+plotSTRes <- ggplot(data = tabST, 
+                                aes(fill= binType, y= spearmanTestStat, x= birdSp)) + 
+    geom_bar(position = "dodge", stat = "identity") +
+    ggtitle("Spearman rank correlation test for national models with forest area predictions, by species") +
+    xlab("Species")  +
+    ylab("Spearman test statistic") +
+    theme_classic() + 
+    scale_fill_manual(values=c('skyblue1', "springgreen4"), 
+                      labels = c("1D", "2D")) +
+    theme(title = element_text(size = 14),
+          legend.title = element_blank(),
+          legend.position= "bottom",
+          axis.text.x = element_text(size = 10, angle = 45, hjust = 1), 
+          axis.title = element_text(size = 12))
+plotSTRes
+
+
+```
+
+
+```{r do paired t-test on mean residuals and spatial autocorrelation of the residuals results}
+residualStatsTTest <- as.data.frame(residualStats)
+ 
+#mean residual
+diffMeansRes <- residualStatsTTest$mean1D - residualStatsTTest$mean2D
+hist(diffMeansRes,   
+     col="darkblue", 
+     main="Histogram of differences between mean residuals for 1D and 2D by bird",
+     xlab="Difference")
+meanResTTest <- t.test(residualStatsTTest$mean1D,
+       residualStatsTTest$mean2D,
+       paired=TRUE)
+meanResTTest 
+
+#spatial autocorrelation of the residuals
+diffSpaAutocor <- residualStatsTTest$spaAutocor1D - residualStatsTTest$spaAutocor2D
+hist(diffSpaAutocor,   
+     col="darkblue", 
+     main="Histogram of differences between tests of spatial autocorrelation of the residuals for 1D and 2D by bird",
+     xlab="Difference")
+spaAutoCorTTest <- t.test(residualStatsTTest$spaAutocor1D,
+       residualStatsTTest$spaAutocor2D,
+       paired=TRUE)
+spaAutoCorTTest 
+
+```
