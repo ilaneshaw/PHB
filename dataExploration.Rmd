@@ -1,0 +1,192 @@
+---
+title: "dataExamination"
+author: "Isolde Lane Shaw"
+date: "2/4/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load rasters}
+
+load(file.path(downloadFolderArea, "rasterToMatch.Rdata"))
+load(file.path(downloadFolderForestClass, "forClassRaster.Rdata"))
+load(file.path(downloadFolderForestClass, "nonForRaster.Rdata"))
+load(file.path(downloadFolderForestClass, "ageRaster.Rdata"))
+load(file.path(downloadFolderForestClass, "landscapeRaster.Rdata"))
+load(file.path(downloadFolderForestClass, "FNFRaster.Rdata"))
+
+```
+
+
+# Examine the input land class raster, forest class raster and age raster
+
+```{r makeClassBarChart}
+
+allLandRasters <- raster::stack( forClassRaster,
+                                   nonForRaster,
+                                    landscapeRaster, 
+                                       ageRaster, 
+                                       FNFRaster,
+                                        rasterToMatch)
+    
+    
+    ## take the values from the rasters and input 
+    ## them to a data table called cellValues
+    allLandData <- data.table(getValues(allLandRasters))
+    allLandData <- setnames(allLandData, c( "forClassRaster", 
+                                          "nonForRaster", 
+                                          "landscapeRaster", 
+                                          "ageraster",
+                                          "FNFRaster",
+                                          "LCC05"))
+  allLandData <- unite(allLandData, 
+                        uniqueClasses, 
+                        c(FNFRaster, 
+                          landscapeRaster), 
+                        remove=FALSE)
+  
+    allLandData$FNFRaster <- as.factor(allLandData$FNFRaster)
+    allLandData$uniqueClasses <- as.factor(allLandData$uniqueClasses)
+    
+    #get rid of any rows with NA values
+    allLandData <- na.omit(allLandData, cols = "LCC05") 
+   #allLandData <- na.omit(allLandData, cols = "ageraster")   
+   
+ allLandData
+ 
+ unique(allLandData$uniqueClasses) #this shows us that there are nonForestedAreas with no landscapeRaster
+
+
+ #check that there are no unwanted overlaps for nonForest raster
+ nonForDat <- na.omit(allLandData, cols = "nonForRaster") 
+ unique(nonForDat$forClassRaster)
+ unique(nonForDat$uniqueClasses)
+  unique(nonForDat$landscapeRaster)
+  unique(nonForDat$ageraster)
+  unique(nonForDat$FNFRaster)
+  unique(nonForDat$LCC05)  
+  
+   #check that there are no unwanted overlaps for nonForest raster
+  forClasDat <- na.omit(allLandData, cols = "forClassRaster") 
+ unique(forClasDat$nonForRaster)
+ unique(forClasDat$uniqueClasses)
+  unique(forClasDat$landscapeRaster)
+  unique(forClasDat$ageraster)
+    unique(forClasDat$FNFRaster)
+    unique(forClasDat$LCC05) 
+  
+  
+     landDatStats <- allLandData[order(FNFRaster, 
+                                         uniqueClasses) 
+                                   # order the rows by the land cover class
+                                   ][,list(classCount = .N, 
+                                           meanAge = mean(ageraster)),
+                                           by = list(FNFRaster, 
+                                         uniqueClasses)]
+    landDatStats
+ 
+# make bar chart of different uniqueClasses
+    classDat <- landDatStats[-8,]
+    plotClassCounts <- ggplot(data = classDat,
+                              aes(x = uniqueClasses,
+                                  y = classCount,
+                                  fill = FNFRaster)) +
+    geom_bar(stat = "identity",
+             width = 0.7) +
+    theme_classic() +
+    ggtitle(paste0("Number of pixels per cover class")) +
+    xlab("Cover class") +
+    ylab("Pixel count") +
+    theme(axis.text = element_text(size = 6)) +
+    scale_fill_manual(values=c('goldenrod2', "royalblue3"), 
+                      labels = c("Non-forest raster", "Forest raster")) +
+   scale_x_discrete(labels=c("0_0" = "Forest", "0_1" = "Water/Ice", "0_2" = "Wetland", "0_3" = "Anthro/Exposed", "0_4" = "Grass/Crop" , "0_5" = "Shrub", "0_6" = "Bryoid", "1_1" = "Black Spruce", "1_2" = "Black Spruce Wet", "1_3" = "Conifer Mix", "1_4" = "Deciduous", "1_5" = "Mixed", "1_6" = "Pine", "1_7" = "White Spruce")) +
+    theme(title = element_text(size = 14),
+      legend.title = element_blank(),
+          axis.text.x = element_text(size = 10, angle = 45, hjust = 1), 
+       axis.text.y = element_text(size = 10),
+          axis.title = element_text(size = 12))
+ plotClassCounts   
+
+ # make bar chart of mean age by uniqueClasses
+ ageStats <- landDatStats[-1,]
+ #ageStats <- na.omit(classDat, cols = "meanAge")    
+ plotMeanAgeByClass <- ggplot(data = ageStats,
+                              aes(x = uniqueClasses,
+                                  y = meanAge,
+                                  fill = FNFRaster)) +
+    geom_bar(stat = "identity",
+             width = 0.7) +
+    theme_classic() +
+    ggtitle(paste0("Mean forest age by cover class")) +
+    xlab("Cover class") +
+    ylab("Mean age") +
+    scale_fill_manual(values=c("royalblue3")) +
+   scale_x_discrete(labels=c("1_1" = "Black Spruce", "1_2" = "Black Spruce Wet", "1_3" = "Conifer Mix", "1_4" = "Deciduous", "1_5" = "Mixed", "1_6" = "Pine", "1_7" = "White Spruce")) +
+    theme(title = element_text(size = 14),
+      legend.title = element_blank(),
+          legend.position= "none",
+          axis.text.x = element_text(size = 10, angle = 45, hjust = 1), 
+      axis.text.y = element_text(size = 10),
+          axis.title = element_text(size = 12))
+  plotMeanAgeByClass 
+  
+# make histogram of ages
+  #landDatNoNAs <- na.omit(allLandData)
+  ageHist <-ggplot(data = allLandData, aes(x= ageraster)) + 
+    geom_histogram(binwidth = 10, fill="royalblue3") +
+    ggtitle(paste0("Histogram of forest age")) +
+    xlab("Age") +
+    ylab("Pixel count") +
+    theme_classic()+
+    theme(title = element_text(size = 14),
+          axis.text.x = element_text(size = 10, angle = 45, hjust = 1), 
+       axis.text.y = element_text(size = 10),
+          axis.title = element_text(size = 12))
+  ageHist
+ 
+  lay <- rbind(c(1,1),
+             c(2,3))
+landscapeSummary <- gridExtra::grid.arrange(plotClassCounts, plotMeanAgeByClass, ageHist, layout_matrix = lay) 
+# examine 0 class
+  class0 <- allLandData[nonForRaster == "0"]
+  class0 <- droplevels(class0)
+  list(unique(class0$LCC05))
+  
+  
+ class0Stats <- class0[order(LCC05)  
+                       ][,list(classCount = .N), 
+                                                                                      by = list(LCC05)]
+    class0Stats
+ class0Stats$LCC05 <- as.factor(class0Stats$LCC05)
+ 
+    plot0Class <- ggplot(data = class0Stats,
+                              aes(x = LCC05,
+                                  y = classCount)) +
+    geom_bar(stat = "identity",
+             width = 0.7, 
+             fill = 'goldenrod2') +
+    theme_classic() +
+    ggtitle(paste0("LCC05 class distribution for remaining forest class cells in non-forest raster")) +
+    xlab("LCC05 class") +
+    ylab("Pixel count") 
+  plot0Class
+    
+    
+    
+  #examine areas that have a 0 for FNFRaster, but NA for landscapeRaster
+  class0_NA <- allLandData[uniqueClasses == "0_NA"]
+  class0_NA <- droplevels(class0_NA)
+  list(unique(class0_NA$LCC05))
+ 
+  
+ # class0_NAStats <- class0_NA[order(LCC05) 
+ #                                   # order the rows by the land cover class
+ #                                   ][,list(LCC05 = .N)]
+ #    class0_NAStats
+
+```
+
