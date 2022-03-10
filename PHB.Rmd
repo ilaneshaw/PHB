@@ -867,9 +867,13 @@ ageGrouping <- 20 #how many years included per age class
 maxAgeClass <- 10 #what the oldest age class will be (everything older will be included in this class)
 nTrees <- 5000 #number of trees for gbm
 
+
 birdMatriciesAndSummaries <- lapply(X = birdDatasets, FUN = function(birdDF) {
   
-old <- Sys.time() #keep track of how long each bird takes
+ #keep track of how long each bird takes
+  print(Sys.time()) 
+  print(unique(birdDF$birdSp))
+   
 
 #separate out data table rows that are forested
 forestedDF <- birdDF[forestedStatus == "1"]
@@ -886,28 +890,33 @@ gbmFitted <- gbm::gbm(formula = birdDensity ~ .,
                       data = forestedDF,
                       interaction.depth = 2,
                       n.trees = nTrees,
+                      #verbose = TRUE,
                       shrinkage = 0.3,
                       n.minobsinnode = 5,
                       bag.fraction = .80, 
-                      train.fraction = 1,
-                      verbose = TRUE) #same number of trees as used in predict.gbm
+                      train.fraction = 1) #same number of trees as used in predict.gbm
 
-
-plotGBM <- gbm::plot.gbm(gbmFitted, i.var = c(1,2))
-plot(plotGBM)
-
-FriedmansHStat <- gbm::interact.gbm(gbmFitted, 
-                                    data = forestedDF, 
-                                    i.var = c(1,2), 
-                                    n.trees = nTrees)
-print(FriedmansHStat)
 #print summary of relative influence by the factors
 par(mar = c(5, 8, 1, 1))
 relInfGBM <- summary(gbmFitted, method = relative.influence)
 relInfGBM
 print(relInfGBM)
 
-summaryGBM <- c(relInfGBM, FriedmansHStat, plotGBM)
+#get Freidman's h-stat
+FriedmansHStat <- gbm::interact.gbm(gbmFitted, 
+                                    data = forestedDF, 
+                                    i.var = c(1,2), 
+                                    n.trees = nTrees)
+print(FriedmansHStat)
+
+#check gbm plot
+plotGBM <- gbm::plot.gbm(gbmFitted, i.var = c(1,2))
+plot(plotGBM)
+
+#make into single summary object
+summaryGBM <- list(relInfGBM, FriedmansHStat, plotGBM)
+names(summaryGBM) <- c("relInfGBM", "FriedmansHStat", "plotGBM")
+
 #generate prediction df using expand(?)
 maxAge <- max(forestedDF$age)
 allAges <- c(1:maxAge)
@@ -929,7 +938,7 @@ gbmPredDF <- cbind(birdPredictDF, gbmPred, ageClasses)
 gbmPredDF$ageClasses <- as.factor(gbmPredDF$ageClasses)
 gbmPredDF$landForClass <- as.factor(gbmPredDF$landForClass)
 gbmPredDT <- as.data.table(gbmPredDF)
-#TODO in the future add weight averages by gbm prediction variance
+
 # gbmPredDF <- aggregate( gbmPred ~ ageClasses * landForClass, gbmPredDF, mean )
 gbmPredDT <- gbmPredDT[order(list(landForClass, ageClasses))  
                              ][,list(gbmPred = mean(gbmPred)), 
@@ -944,24 +953,21 @@ birdMatrix <- reshape2::acast(gbmPredDT,
 matrixAndSummary <- list(birdMatrix, summaryGBM) 
 names(matrixAndSummary) <- c("birdMatricies", "summaryGBM")
 
-print("matrix and influence summary complete")
-
-new <- Sys.time() - old # calculate difference
-  print(new) # print in nice format
-  
       return(matrixAndSummary)
    
     })
 
+save(birdMatriciesAndSummaries, 
+        file =  file.path(outputFolderBirdPreds, "birdMatriciesAndSummaries.Rdata"))
+   #load(file.path(outputFolderBirdPreds, "birdMatriciesAndSummaries.Rdata"))
+
 #separate matricies from summaries
 birdMatricies <- lapply(X = birdList, FUN = function(bird) {
-
 print(bird)
 birdMatrix <-  eval(parse(text=paste("birdMatriciesAndSummaries$", bird, "$birdMatricies", sep = ""))) 
-
       return(birdMatrix)
-   
-    })
+       })
+
 names(birdMatricies) <- birdList
 save(birdMatricies, 
         file =  file.path(outputFolderBirdPreds, "birdMatricies.Rdata"))  
