@@ -154,7 +154,7 @@ return(raster1DBinsForest)
 
 #as Rdata file
 save(for1DMaps,
-     file =  file.path(outputFolderBirdPredsRasters, "CASFRIfor1DMaps.Rdata"))
+     file =  file.path(outputFolderBirdPredsRasters, "for1DMaps.Rdata"))
 #load(file.path(outputFolderBirdPredsRasters, "for1DMaps.Rdata"))
 
 #as tif files
@@ -264,7 +264,7 @@ for2DMaps <- lapply(X = birdList, FUN = function(bird){
 extent(forClassRaster) == extent(ageClassRaster)
 
 #reform matrix
-matrix <- eval(parse(text=paste("birdPreds$birdMatrices$", bird, sep = "")))
+matrix <- eval(parse(text=paste("birdPreds$birdMatricies$", bird, sep = "")))
 reclassTab2D <- melt(matrix)
 colnames(reclassTab2D) <- c( "forClass","ageClass", "birdDensityPred")
 
@@ -301,7 +301,7 @@ names(for2DMaps) <- birdList
 #as Rdata file
 
    save(for2DMaps,
-        file =  file.path(outputFolderBirdPredsRasters, "CASFRIfor2DMaps.Rdata"))
+        file =  file.path(outputFolderBirdPredsRasters, "for2DMaps.Rdata"))
    # #load(file.path(outputFolderBirdPredsRasters, "for2DMaps.Rdata"))
 
 #as tif files
@@ -424,7 +424,7 @@ names(for1DRes) <- birdList
 #as Rdata file
 
    save(for1DRes,
-        file =  file.path(outputFolderBirdPredsRasters, "CASFRIfor1DRes.Rdata"))
+        file =  file.path(outputFolderBirdPredsRasters, "for1DRes.Rdata"))
    # load(file.path(outputFolderBirdPredsRasters, "for1DRes.Rdata"))
    
 ```
@@ -455,7 +455,7 @@ names(for2DRes) <- birdList
 #as Rdata file
 
    save(for2DRes,
-        file =  file.path(outputFolderBirdPredsRasters, "CASFRIfor2DRes.Rdata"))
+        file =  file.path(outputFolderBirdPredsRasters, "for2DRes.Rdata"))
    # load(file.path(outputFolderBirdPredsRasters, "for2DRes.Rdata"))
    
 
@@ -741,7 +741,7 @@ resTabs
         file =  file.path(outputFolderBirdPreds, "resTabs.Rdata"))
    # load(file.path(outputFolderBirdPreds, "resTabs.Rdata"))
 
-resTabSingle <- rbind(resTabs$BARS, resTabs$OSFL, resTabs$OVEN, resTabs$RUBL)
+resTabSingle <- rbind(resTabs$BARS, resTabs$GRAJ, resTabs$OVEN, resTabs$RCKI)
 
 #as Rdata file
 
@@ -809,7 +809,7 @@ residualStats <- do.call(rbind, residualStats)
 
 residualStats
 
- save(CASFRIresidualStats,
+ save(residualStats,
         file =  file.path(outputFolderBirdPreds, "residualStats.Rdata"))
    # load(file.path(outputFolderBirdPreds, "residualStats.Rdata"))
 
@@ -889,7 +889,7 @@ spearmanStats <- lapply(X = birdList, FUN = function(bird){
   
   nmRas <- eval(parse(text=paste("birdRasters$", bird, sep = "")))
    map1D <- eval(parse(text=paste("for1DMaps$", bird, sep = "")))
-   map2D <- eval(parse(text=paste("for1DMaps$", bird, sep = "")))
+   map2D <- eval(parse(text=paste("for2DMaps$", bird, sep = "")))
 
   
 valsNM <- getValues(nmRas)
