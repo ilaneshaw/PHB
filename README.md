@@ -7,7 +7,7 @@ This is the core of the post-hoc binning procedure. Here the following is carrie
 3) Extraction of raster data into birdDatasets
 4) 1D post-hoc binning (prediction of bird density by land/forest class), and associated data exploration and analysis
 5) 2D post-hoc binning (prediction of bird density by forest and age class), and associated data exploration and analysis
-6) Comparison of 1D and 2D binning
+
 
 ## MB.Rmd
 This is a secondary section, to be used once PHB.Rmd has been run. Here the following is carried out:
@@ -16,5 +16,10 @@ This is a secondary section, to be used once PHB.Rmd has been run. Here the foll
 3) Code to visually present and compare these rasters is provided
 4) Analysis and comparison of 1D and 2D binning
 
+## compare1Dvs2D.Rmd
+Code used in comparison of 1D and 2D binning is here
+
 ## dataExploration.Rmd
 Here the input landscape data is explored, and summary statistics and graphs of the data are produced.  
+
+
