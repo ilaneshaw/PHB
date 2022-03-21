@@ -959,7 +959,21 @@ plotSTRes
 ```
 
 
-```{r do paired t-test on mean residuals and spatial autocorrelation of the residuals results}
+```{r do paired t-test on spearman stats, mean residuals and spatial autocorrelation of the residuals results}
+
+#spearman stats t-test
+spearmanTTest <- as.data.frame(spearmanStats)
+diffSpearman <- spearmanTTest$spearman1D - spearmanTTest$spearman2D
+hist(diffSpearman,   
+     col="darkblue", 
+     main="Histogram of differences between Spearman Rank Test results for 1D and 2D by bird",
+     xlab="Difference")
+spearmanTTest <- t.test(spearmanTTest$spearman1D,
+       spearmanTTest$spearman2D,
+       paired=TRUE)
+spearmanTTest
+
+
 residualStatsTTest <- as.data.frame(residualStats)
  
 #mean residual
